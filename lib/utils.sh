@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-# 색상 정의
+# Color Definitions
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[0;33m'
@@ -8,7 +8,7 @@ BLUE='\033[0;34m'
 NC='\033[0;20m' # No Color
 BOLD='\033[1m'
 
-# 로깅 함수들
+# Logging Functions
 log_info() {
   printf "${BLUE}[INFO]${NC} %b\n" "$*"
 }
@@ -31,7 +31,7 @@ log_header() {
   printf "${BOLD}${BLUE}========================================= ${NC}\n\n"
 }
 
-# OS 및 환경 감지
+# OS & Environment Detection
 get_os() {
   local os_name
   os_name=$(uname -s)
@@ -53,12 +53,12 @@ get_os() {
   fi
 }
 
-# command 존재 여부 체크
+# Check if command exists
 has_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
-# 필요에 따라 sudo 패스워드 캐싱
+# Cache sudo password if necessary
 sudo_keepalive() {
   if ! sudo -n true 2>/dev/null; then
     log_info "Sudo privileges may be required for some installations. Please enter your password:"
