@@ -139,9 +139,11 @@ done
 
 # Apply configuration for selected IDEs
 for idx in "${final_indices[@]}"; do
-  local ide_name="${detected_ides[idx]}"
-  local ide_path="${detected_paths[idx]}"
-  local ide_cli="${detected_clis[idx]}"
+  # No 'local' here - this loop is at file scope, and bash rejects 'local'
+  # outside a function, which would leave every one of these unset.
+  ide_name="${detected_ides[idx]}"
+  ide_path="${detected_paths[idx]}"
+  ide_cli="${detected_clis[idx]}"
 
   log_info "----------------------------------------"
   log_info "Configuring ${ide_name}..."
@@ -174,7 +176,7 @@ for idx in "${final_indices[@]}"; do
   fi
 
   # 4. Install Extensions
-  local ext_file="$PROJECT_ROOT/config/extensions.txt"
+  ext_file="$PROJECT_ROOT/config/extensions.txt"
   if [ -f "$ext_file" ]; then
     if has_cmd "$ide_cli"; then
       log_info "Installing extensions using '${ide_cli}' CLI..."
@@ -182,7 +184,6 @@ for idx in "${final_indices[@]}"; do
         # Ignore empty lines and comments
         [[ -z "$line" || "$line" =~ ^# ]] && continue
         # Trim whitespace
-        local ext_id
         ext_id=$(echo "$line" | xargs)
         log_info "Installing: $ext_id"
         "$ide_cli" --install-extension "$ext_id" >/dev/null 2>&1
