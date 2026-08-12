@@ -9,9 +9,11 @@
 #   Codex CLI - ~/.codex/config.toml and ~/.codex/hooks.json:
 #     notify = ["…/agent-notify.sh", "codex"]
 #     agent-notify.sh codex start   UserPromptSubmit  retract the last banner
+#     agent-notify.sh codex input   PermissionRequest notify that it wants you
 #   Codex appends completion JSON to notify as the final argument, while the
-#   lifecycle hook sends start JSON on stdin. This integration uses that start
-#   event only for retraction; Codex completion still notifies on every turn.
+#   lifecycle hooks send JSON on stdin. This integration uses those events for
+#   retraction and approval prompts; Codex completion still
+#   notifies on every turn.
 #
 # The banner is two lines and nothing more:
 #
@@ -39,11 +41,23 @@
 # there is at least a sound when the banner never arrives.
 
 set -u
+umask 077
 
 MIN_SECONDS="${AGENT_NOTIFY_MIN_SECONDS:-30}"
-STATE_DIR="${TMPDIR:-/tmp}"
-LOG="$HOME/.claude/hooks/notify.log"
+STATE_DIR="${AGENT_NOTIFY_STATE_DIR:-${TMPDIR:-/tmp}/agent-notify-$UID}"
+LOG_DIR="${AGENT_NOTIFY_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-notify}"
+LOG="$LOG_DIR/notify.log"
 FOCUS="$HOME/.local/bin/agent-focus.sh"
+
+if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
+  LOG="/dev/null"
+fi
+if ! mkdir -p "$STATE_DIR" 2>/dev/null || ! chmod 700 "$STATE_DIR" 2>/dev/null; then
+  log_state_error="state directory unavailable: $STATE_DIR"
+  STATE_DIR=""
+else
+  log_state_error=""
+fi
 
 # Terminal identity, inherited from the shell that launched the agent.
 HOST_BUNDLE="${__CFBundleIdentifier:-}"
@@ -59,7 +73,16 @@ if [ -z "$NOTIFIER" ]; then
   done
 fi
 
-log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG"; }
+log() { printf '%s %s\n' "$(date '+%F %T')" "$*" >>"$LOG" 2>/dev/null || true; }
+
+[ -z "$log_state_error" ] || log "$log_state_error"
+
+case "$MIN_SECONDS" in
+  ''|*[!0-9]*)
+    log "invalid AGENT_NOTIFY_MIN_SECONDS=$MIN_SECONDS; using 30"
+    MIN_SECONDS=30
+    ;;
+esac
 
 # Keep the debug log bounded.
 if [ -f "$LOG" ] && [ "$(wc -c <"$LOG")" -gt 262144 ]; then
@@ -182,14 +205,17 @@ APPLESCRIPT
 # Codex notify hands completion JSON as an argument. Codex lifecycle hooks and
 # Claude Code hooks pipe their payload on stdin.
 if [ "$tool" = "codex" ]; then
-  if [ "${1:-}" = "start" ]; then
-    action="start"
-    payload=$(cat)
-  else
-    action="turn-end"
-    payload="${1:-}"
-    [ -n "$payload" ] || payload='{}'
-  fi
+  case "${1:-}" in
+    start|input)
+      action="$1"
+      payload=$(cat)
+      ;;
+    *)
+      action="turn-end"
+      payload="${1:-}"
+      [ -n "$payload" ] || payload='{}'
+      ;;
+  esac
 else
   action="${1:-}"
   payload=$(cat)
@@ -197,7 +223,14 @@ fi
 
 jqr() { printf '%s' "$payload" | jq -r "$1" 2>/dev/null; }
 
-cwd=$(jqr '.cwd // empty')
+# `notify` currently supports only agent-turn-complete. Ignore future event
+# types until their meaning and payload are handled deliberately.
+if [ "$action" = "turn-end" ] && [ "$(jqr '.type // empty')" != "agent-turn-complete" ]; then
+  log "skip    codex unsupported notify event"
+  exit 0
+fi
+
+cwd=$(jqr '(.cwd // empty) | select(type == "string")')
 [ -n "$cwd" ] || cwd="$PWD"
 root=$(resolve_project_root "$cwd" "$HOST_BUNDLE")
 project=$(basename "$cwd")
@@ -210,20 +243,38 @@ else
 fi
 # The group id is what makes a banner REPLACE the previous one instead of
 # piling up, so it has to stay stable for as long as you'd think of it as
-# "the same terminal". Lifecycle hooks call it session_id, while the legacy
-# Codex notify payload calls the same stable chat identity thread-id. Older
-# payloads without either identifier retain the project-level fallback.
-session=$(jqr '.session_id // .["thread-id"] // empty')
+# "the same terminal". Lifecycle hooks call it session_id, while the
+# Codex notify payload calls the same stable chat identity thread-id. Payloads
+# without either identifier retain the project-level fallback.
+session=$(jqr '(.session_id // .["thread-id"] // empty) | select(type == "string")')
 [ -n "$session" ] || session="$project"
 group="agent-$tool-$session"
-stamp="$STATE_DIR/agent-notify-$tool-$session"
+if [ -n "$STATE_DIR" ]; then
+  state_key=$(printf '%s:%s' "$tool" "$session" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')
+  if [ -n "$state_key" ]; then
+    stamp="$STATE_DIR/agent-notify-$state_key"
+  else
+    log "state key unavailable for $tool/$project"
+    stamp=""
+  fi
+else
+  stamp=""
+fi
 
 case "$action" in
   start)
     # Claude Stop consumes this timestamp to enforce MIN_SECONDS. Codex uses
-    # its start hook only for retraction and its legacy completion path does
+    # its start hook only for retraction and its completion path does
     # not consume duration state.
-    [ "$tool" != "claude" ] || date +%s >"$stamp"
+    if [ "$tool" = "claude" ] && [ -n "$stamp" ]; then
+      stamp_tmp="$stamp.$$"
+      if date +%s >"$stamp_tmp" && mv "$stamp_tmp" "$stamp"; then
+        :
+      else
+        rm -f "$stamp_tmp"
+        log "start   $tool/$project failed to write duration stamp"
+      fi
+    fi
     # Submitting a prompt means you're already here, so retract whatever
     # this session left sitting in Notification Center.
     if [ -n "$NOTIFIER" ]; then
@@ -235,13 +286,24 @@ case "$action" in
     ;;
   stop)
     # No stamp means this Stop came from /clear, resume or compact - stay quiet.
-    if [ ! -f "$stamp" ]; then
+    if [ -z "$stamp" ] || [ ! -f "$stamp" ]; then
       log "stop    $tool/$project no stamp, skipped"
       exit 0
     fi
     start=$(cat "$stamp")
     rm -f "$stamp"
-    elapsed=$(($(date +%s) - start))
+    case "$start" in
+      ''|*[!0-9]*)
+        log "stop    $tool/$project invalid stamp, skipped"
+        exit 0
+        ;;
+    esac
+    now=$(date +%s)
+    if [ "$start" -gt "$now" ]; then
+      log "stop    $tool/$project future stamp, skipped"
+      exit 0
+    fi
+    elapsed=$((now - start))
     if [ "$elapsed" -lt "$MIN_SECONDS" ]; then
       log "stop    $tool/$project ${elapsed}s < ${MIN_SECONDS}s, skipped"
       exit 0

@@ -82,19 +82,36 @@ Claude Code · 49s · 14:23      <- which agent, how long it took, when it lande
 - **Input-needed alerts mean actual intervention.** Claude Code forwards
   permission prompts and MCP elicitation dialogs, but filters `idle_prompt` so
   a completed turn does not produce a second notification one minute later.
+  Codex forwards `PermissionRequest` events, including shell, file-edit, and
+  MCP approval prompts, through an asynchronous lifecycle hook so it does not
+  delay the approval UI.
 - Claude Code stays quiet for turns under 30 seconds. Override with
   `AGENT_NOTIFY_MIN_SECONDS`. Codex completion notifications remain unfiltered
-  and fire on every turn.
+  by duration and fire on every completed turn.
 
-The installer edits `~/.claude/settings.json`, `~/.codex/config.toml`, and
-`~/.codex/hooks.json` in place, backing up existing files and skipping either
-agent that is not installed. Re-running replaces only this module's entries
-instead of stacking duplicates and preserves unrelated Codex lifecycle hooks.
+The installer stages and validates every script and settings change before it
+touches a live target. It then updates `~/.claude/settings.json`,
+`~/.codex/config.toml`, and `~/.codex/hooks.json` as one commit, rolling back
+files already replaced if a later replacement fails. For every existing target,
+`.bak` permanently preserves the version from before this installer first
+managed it, while `.bak.latest` is refreshed with the version immediately before
+the current run. Re-running replaces only this module's entries instead of
+stacking duplicates and preserves unrelated Codex lifecycle hooks.
+
+Codex hooks are managed exclusively in `~/.codex/hooks.json`. If the same
+`~/.codex/config.toml` contains inline `[hooks]` tables, installation stops
+before copying scripts or changing settings and asks you to move or remove the
+inline hooks. This avoids Codex merging two hook representations in one config
+layer and emitting a startup warning.
+
+The installer skips either agent that is not installed.
+
 Open Codex's `/hooks` menu once after installation to review and trust the new
-`UserPromptSubmit` hook. The hook scripts ship alongside the installer in
-`modules/agents/notify/` and are copied to `~/.local/bin/`.
-The debug log at `~/.claude/hooks/notify.log` includes each removal's group and
-exit code, making stale-banner failures distinguishable from missing hooks.
+`UserPromptSubmit` and `PermissionRequest` hooks. The hook scripts ship
+alongside the installer in `modules/agents/notify/` and are copied to
+`~/.local/bin/`. The debug log at
+`~/.local/state/agent-notify/notify.log` includes each removal's group and exit
+code, making stale-banner failures distinguishable from missing hooks.
 
 Delivery deliberately goes through `terminal-notifier` rather than `osascript`:
 `osascript` has no bundle id, so macOS attributes its notifications elsewhere
