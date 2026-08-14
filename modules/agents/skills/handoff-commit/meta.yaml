@@ -1,0 +1,7 @@
+name: handoff-commit
+description: Hands the git-commit workflow off to the Antigravity CLI (agy) and verifies the result
+
+targets:
+  - claude
+  - codex
+  # - antigravity   # agy runs git-commit directly; handing off to itself is a loop
