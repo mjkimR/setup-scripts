@@ -13,8 +13,8 @@ allowed-tools: Bash(agentkit:*), Bash(git status:*), Bash(git log:*)
 Delegates committing to the Antigravity CLI (`agy`), which runs the `git-commit`
 skill headlessly and creates the commits itself.
 
-[handoff-commit-safe](../handoff-commit-safe/SKILL.md) is the same command with
-`--safe`. Use this skill unless the user asked for the safe variant.
+Repository settings (whitelist, timeline, template, language) configured in
+`.git/agentkit-commit.json` are automatically respected.
 
 ## Why this exists
 
