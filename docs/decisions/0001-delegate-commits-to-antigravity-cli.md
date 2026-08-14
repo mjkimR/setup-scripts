@@ -1,8 +1,16 @@
 # 1. Delegate commit workflows to the Antigravity CLI
 
 - **Date**: 2026-08-14
-- **Status**: Accepted
+- **Status**: Accepted, amended by
+  [0002](./0002-consolidate-the-commit-skill-set.md)
 - **Verified against**: `agy` 1.1.12
+
+> **Amendment note.** Every behavioural decision below still holds. What changed
+> in 0002 is where the code lives: the skills became documentation and all of
+> their logic moved into one `uv`-installed `agentkit` CLI, with a generic
+> handoff runner driving commit *tasks* instead of two near-identical shell
+> scripts. The safe path now delegates `/git-commit` rather than
+> `/git-commit-safe`. Read the file names below as history.
 
 ## Context
 
