@@ -10,17 +10,24 @@
 
 multi_select_menu() {
   local prompt="$1"
-  local -n menu_options="$2"
-  local -n menu_defaults="$3"
-  local -n menu_out_array="$4"
+  # Stock macOS ships bash 3.2, which has no `local -n` namerefs — the caller's
+  # arrays are copied in through eval and the result written back the same way.
+  # The _msm_ prefix keeps these locals from shadowing the caller's array names.
+  local _msm_options_name="$2"
+  local _msm_defaults_name="$3"
+  local _msm_out_name="$4"
+  local -a _msm_options=()
+  local -a _msm_defaults=()
+  eval "_msm_options=(\"\${${_msm_options_name}[@]}\")"
+  eval "_msm_defaults=(\"\${${_msm_defaults_name}[@]}\")"
 
-  local num_options=${#menu_options[@]}
+  local num_options=${#_msm_options[@]}
   local active_idx=0
   local -a checked
 
   # Set initial check state
   for ((i=0; i<num_options; i++)); do
-    if [ "${menu_defaults[i]}" = "true" ]; then
+    if [ "${_msm_defaults[i]}" = "true" ]; then
       checked[i]=true
     else
       checked[i]=false
@@ -52,9 +59,9 @@ multi_select_menu() {
 
       if [ $i -eq $active_idx ]; then
         # Currently active option (Arrow focus)
-        printf " \033[1;33m➔\033[0m %b %b\n" "$checkbox" "\033[1;33m${menu_options[i]}\033[0m"
+        printf " \033[1;33m➔\033[0m %b %b\n" "$checkbox" "\033[1;33m${_msm_options[i]}\033[0m"
       else
-        printf "   %b %s\n" "$checkbox" "${menu_options[i]}"
+        printf "   %b %s\n" "$checkbox" "${_msm_options[i]}"
       fi
     done
   }
@@ -64,12 +71,16 @@ multi_select_menu() {
 
   # Key input detection loop
   while true; do
-    # Wait for 1-byte key input
-    read -rsn1 key
+    # Wait for 1-byte key input. IFS= matters: without it read strips a lone
+    # space to "", which is indistinguishable from Enter — spacebar would
+    # confirm the menu instead of toggling.
+    IFS= read -rsn1 key
     
     # Handle escape sequences (Arrow keys)
     if [[ "$key" == $'\x1b' ]]; then
-      read -rsn2 -t 0.05 key
+      # bash 3.2 rejects fractional read timeouts; the [A/[B bytes of an arrow
+      # key arrive instantly anyway, so a 1s ceiling only affects a bare ESC.
+      IFS= read -rsn2 -t 1 key
       if [[ "$key" == "[A" ]]; then # Up arrow
         ((active_idx--))
         if [ $active_idx -lt 0 ]; then
@@ -105,10 +116,10 @@ multi_select_menu() {
   trap - INT TERM
 
   # Return final selected indices
-  menu_out_array=()
+  eval "${_msm_out_name}=()"
   for ((i=0; i<num_options; i++)); do
     if [ "${checked[i]}" = "true" ]; then
-      menu_out_array+=("$i")
+      eval "${_msm_out_name}+=(\"$i\")"
     fi
   done
   printf "\n"
