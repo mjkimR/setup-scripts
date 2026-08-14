@@ -62,10 +62,9 @@ Before running the script, you can adjust the configs inside the `config/` direc
 
 | Skill | Installed for | What it does |
 |---|---|---|
-| `git-commit` | Antigravity | The commit workflow itself: read `git log` for the repo's conventions, split changes into atomic units, write the message, commit. |
-| `git-commit-safe` | Antigravity | `git-commit` plus an email whitelist and a resolved commit timestamp. |
-| `handoff-commit` | Claude Code, Codex | Delegates the whole commit workflow to the Antigravity CLI (`agy`) and reports the result. |
-| `handoff-commit-safe` | Claude Code, Codex | The same handoff with the whitelist and timestamp enforced locally, one `agy` call per atomic unit. |
+| `git-commit` | Antigravity | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls. |
+| `git-commit-revise` | Antigravity | Review, critique, and propose revisions for commit messages or amend latest commits. |
+| `handoff-commit` | Claude Code, Codex | Delegates commit workflow to Antigravity CLI (`agy`), automatically respecting repository config. |
 
 The point of the handoff is that Claude Code and Codex sessions usually run at
 high reasoning effort, which commit messages do not need. `agy` is cheaper and
@@ -78,9 +77,11 @@ when every tool call was denied.
 is the only reference that resolves identically from all three agents:
 
 ```bash
-agentkit handoff commit [--safe]   # what the handoff skills run
-agentkit commit-safe init          # write ~/.config/git-commit-safe/config.yaml
+agentkit commit onboard            # initialize repository commit config from git log
+agentkit commit analyze            # inspect detected language, author, and conventions
+agentkit commit config             # show or edit repository commit config
 agentkit commit-safe verify        # whitelist + timestamp pre-flight
+agentkit handoff commit [--safe]   # what the handoff skills run
 agentkit agy check | agy grant     # the allow-list headless agy needs
 agentkit git summary               # working tree overview
 ```
@@ -98,10 +99,12 @@ schema, `tools/agentkit/README.md` for the package layout, and
 
 ---
 
-## Tests
+## Quality Checks & Tests
 
 ```bash
-tests/run-all.sh            # every suite: shell + pytest
+./check.sh                  # auto-format + auto-fix lint + run all test suites
+./check.sh --check          # verify-only (fails if unformatted/lint issues exist)
+tests/run-all.sh            # run test suites directly: shell + pytest
 tests/run-all.sh agentkit   # only suites whose name matches
 ```
 
