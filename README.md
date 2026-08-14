@@ -12,6 +12,7 @@ An interactive, terminal-based (TUI) setup tool for automating the configuration
 - **Zsh & Oh My Zsh**: Performs unattended setup of Zsh, Oh My Zsh, and installs helper plugins (`zsh-autosuggestions`, `zsh-syntax-highlighting`).
 - **IDE Sync (VS Code, Cursor, VSCodium)**: Auto-detects installed editors, backs up existing configurations, copies preset settings/keybindings, and auto-installs plugins listed in `extensions.txt`.
 - **Agent Notification Hooks (macOS)**: One macOS notification format shared by Claude Code and Codex CLI, with click-to-focus that returns to the exact terminal the turn came from.
+- **Commit Skills**: A shared commit workflow for Antigravity, Claude Code and Codex, including a handoff that delegates committing to the Antigravity CLI.
 
 ---
 
@@ -24,6 +25,9 @@ setup-scripts/
 ├── README.md         # Documentation
 ├── lib/              # Shared helper libraries (UI & Utilities)
 ├── config/           # VS Code settings and extension lists
+├── docs/decisions/   # Architecture decision records
+├── tools/            # CLIs installed onto PATH (uv tools)
+├── tests/            # All suites, shell and pytest — see tests/run-all.sh
 └── modules/          # Installation scripts grouped by tool categories
 ```
 
@@ -48,6 +52,64 @@ Before running the script, you can adjust the configs inside the `config/` direc
 1. **`config/vscode/settings.json`**: Place your customized IDE settings here (e.g., font size, tab sizing, format-on-save preference).
 2. **`config/vscode/keybindings.json`**: Add your custom editor shortcut mappings.
 3. **`config/extensions.txt`**: List the extensions you want to install, one per line. Blank lines and lines starting with `#` are ignored.
+
+---
+
+## Commit Skills
+
+`modules/agents/skills/install.sh` symlinks each skill into the agents its
+`meta.yaml` names, and installs the CLIs those skills depend on.
+
+| Skill | Installed for | What it does |
+|---|---|---|
+| `git-commit` | Antigravity | The commit workflow itself: read `git log` for the repo's conventions, split changes into atomic units, write the message, commit. |
+| `git-commit-safe` | Antigravity | `git-commit` plus an email whitelist and a resolved commit timestamp. |
+| `handoff-commit` | Claude Code, Codex | Delegates the whole commit workflow to the Antigravity CLI (`agy`) and reports the result. |
+| `handoff-commit-safe` | Claude Code, Codex | The same handoff with the whitelist and timestamp enforced locally, one `agy` call per atomic unit. |
+
+The point of the handoff is that Claude Code and Codex sessions usually run at
+high reasoning effort, which commit messages do not need. `agy` is cheaper and
+faster, and commit quality tolerates it. The runner verifies the outcome against
+git rather than trusting `agy`'s exit code — headless `agy` reports success even
+when every tool call was denied.
+
+**The skills are documentation.** Everything they need to *do* lives in
+`tools/agentkit/`, a `uv` tool installed alongside them, because a `PATH` command
+is the only reference that resolves identically from all three agents:
+
+```bash
+agentkit handoff commit [--safe]   # what the handoff skills run
+agentkit commit-safe init          # write ~/.config/git-commit-safe/config.yaml
+agentkit commit-safe verify        # whitelist + timestamp pre-flight
+agentkit agy check | agy grant     # the allow-list headless agy needs
+agentkit git summary               # working tree overview
+```
+
+`agy` needs `command(git add)`, `command(git commit)` and `command(git ls-files)`
+before the first handoff; `agentkit agy grant` adds them and the runner refuses
+to start without them.
+
+For `--safe`, the first commit of a day lands on a random point inside the
+configured window; later commits advance by the real time that actually passed,
+with a minimum gap so a batch never collapses onto one timestamp. See
+`modules/agents/skills/git-commit-safe/references/onboard.md` for the config
+schema, `tools/agentkit/README.md` for the package layout, and
+`docs/decisions/` for why the handoff is shaped this way.
+
+---
+
+## Tests
+
+```bash
+tests/run-all.sh            # every suite: shell + pytest
+tests/run-all.sh agentkit   # only suites whose name matches
+```
+
+Shell suites live beside what they cover under `tests/agents/`; the `agentkit`
+package is covered by pytest in `tests/tools/agentkit/`, driven through
+`uv run` so it tests the source in this repository rather than whatever is
+installed. The handoff runs end to end against a stub `agy` that can be told to
+cooperate, commit partially, or deny every command while reporting success.
 
 ---
 
