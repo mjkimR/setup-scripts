@@ -19,7 +19,8 @@ from pathlib import Path
 
 from .. import gitutil
 from ..agy import AgyClient, AgyRun, missing_rules
-from ..errors import ExitCode, PreflightError
+from ..errors import ConfigError, ExitCode, PreflightError
+from ..repoconfig import load_repo_config, repo_config_path
 from ..ui import Reporter
 from .tasks import HandoffTask
 
@@ -135,6 +136,16 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
         )
 
     root = repo or gitutil.repo_root()
+
+    # Refuse to start commit handoff if repository is not onboarded
+    if task.name in ("commit", "commit-safe"):
+        repo_cfg = load_repo_config(cwd=root)
+        if repo_cfg is None:
+            raise ConfigError(
+                f"repository is not onboarded: {repo_config_path(cwd=root)} not found.",
+                "Run `agentkit commit onboard` to initialize configuration with auto-detected settings.",
+                "Or ask the user for preferences: whitelist, timeline, language (ko/en), style.",
+            )
 
     # Refuse to start without the grants rather than discovering it after a
     # wasted agy round trip. Headless agy soft-denies and reports success, so a

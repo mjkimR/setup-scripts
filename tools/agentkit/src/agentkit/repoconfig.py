@@ -49,10 +49,13 @@ class ConventionConfig:
     rules: list[str] = field(default_factory=list)
 
 
+CURRENT_CONFIG_VERSION = 1
+
+
 @dataclass
 class RepoConfig:
     path: Path
-    version: int = 1
+    version: int = CURRENT_CONFIG_VERSION
     whitelist: WhitelistConfig = field(default_factory=WhitelistConfig)
     timeline: TimelineConfig = field(default_factory=TimelineConfig)
     conventions: ConventionConfig = field(default_factory=ConventionConfig)
@@ -64,13 +67,13 @@ class RepoConfig:
 
     @classmethod
     def from_dict(cls, path: Path, data: dict[str, Any]) -> RepoConfig:
-        whitelist_data = data.get("whitelist", {})
-        timeline_data = data.get("timeline", {})
-        conventions_data = data.get("conventions", {})
+        whitelist_data = data.get("whitelist", {}) if isinstance(data.get("whitelist"), dict) else {}
+        timeline_data = data.get("timeline", {}) if isinstance(data.get("timeline"), dict) else {}
+        conventions_data = data.get("conventions", {}) if isinstance(data.get("conventions"), dict) else {}
 
         return cls(
             path=path,
-            version=data.get("version", 1),
+            version=data.get("version", CURRENT_CONFIG_VERSION),
             whitelist=WhitelistConfig(
                 enabled=whitelist_data.get("enabled", True),
                 allowed_emails=list(whitelist_data.get("allowed_emails", [])),
@@ -94,6 +97,15 @@ class RepoConfig:
         )
 
 
+def needs_migration(config: RepoConfig) -> bool:
+    return config.version < CURRENT_CONFIG_VERSION
+
+
+def migrate_config(config: RepoConfig) -> RepoConfig:
+    config.version = CURRENT_CONFIG_VERSION
+    return config
+
+
 def git_dir(cwd: Path | None = None) -> Path:
     """Find the .git directory (or gitdir for worktrees) of the current repository."""
     raw = gitutil.run(["rev-parse", "--git-dir"], cwd=cwd).strip()
@@ -108,7 +120,7 @@ def repo_config_path(cwd: Path | None = None) -> Path:
     return git_dir(cwd=cwd) / "agentkit-commit.json"
 
 
-def load_repo_config(cwd: Path | None = None) -> RepoConfig | None:
+def load_repo_config(cwd: Path | None = None, *, auto_migrate: bool = False) -> RepoConfig | None:
     try:
         path = repo_config_path(cwd=cwd)
     except Exception:
@@ -119,7 +131,11 @@ def load_repo_config(cwd: Path | None = None) -> RepoConfig | None:
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-        return RepoConfig.from_dict(path, data)
+        cfg = RepoConfig.from_dict(path, data)
+        if auto_migrate and needs_migration(cfg):
+            migrate_config(cfg)
+            save_repo_config(cfg, cwd=cwd)
+        return cfg
     except (json.JSONDecodeError, OSError) as error:
         raise ConfigError(
             f"failed to read repository commit config at {path}: {error}",
