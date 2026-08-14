@@ -39,6 +39,24 @@ has_target() {
   ' "$meta_file"
 }
 
+# Replace $dest with a symlink to $src. `ln -sfn` against a pre-existing real
+# directory would create the link INSIDE it and report success, so a real
+# directory is moved aside first instead of being silently kept.
+link_skill() { # link_skill <src> <dest> <label>
+  local src="$1" dest="$2" label="$3"
+  if [ -e "$dest" ] && [ ! -L "$dest" ]; then
+    local backup="${dest}.bak"
+    if [ -e "$backup" ]; then
+      log_warn "  ↳ $dest is a real directory and $backup already exists; skipping ${label}. Resolve manually and re-run."
+      return 1
+    fi
+    mv "$dest" "$backup"
+    log_warn "  ↳ Pre-existing $dest moved to $backup"
+  fi
+  ln -sfn "$src" "$dest"
+  log_success "  ↳ Linked to ${label}: $dest"
+}
+
 # Collect all skill directories
 skill_dirs=()
 for dir in "$SCRIPT_DIR"/*/; do
@@ -70,25 +88,19 @@ for skill_path in "${skill_dirs[@]}"; do
   # 1. Antigravity Target
   if has_target "$meta_file" "antigravity"; then
     mkdir -p "$ANTIGRAVITY_SKILLS_DIR"
-    dest_path="$ANTIGRAVITY_SKILLS_DIR/$skill_name"
-    ln -sfn "$clean_skill_path" "$dest_path"
-    log_success "  ↳ Linked to Antigravity: $dest_path"
+    link_skill "$clean_skill_path" "$ANTIGRAVITY_SKILLS_DIR/$skill_name" "Antigravity"
   fi
 
   # 2. Claude Code Target (extensible)
   if has_target "$meta_file" "claude"; then
     mkdir -p "$CLAUDE_SKILLS_DIR"
-    dest_path="$CLAUDE_SKILLS_DIR/$skill_name"
-    ln -sfn "$clean_skill_path" "$dest_path"
-    log_success "  ↳ Linked to Claude Code: $dest_path"
+    link_skill "$clean_skill_path" "$CLAUDE_SKILLS_DIR/$skill_name" "Claude Code"
   fi
 
   # 3. Codex Target (extensible)
   if has_target "$meta_file" "codex"; then
     mkdir -p "$CODEX_SKILLS_DIR"
-    dest_path="$CODEX_SKILLS_DIR/$skill_name"
-    ln -sfn "$clean_skill_path" "$dest_path"
-    log_success "  ↳ Linked to Codex: $dest_path"
+    link_skill "$clean_skill_path" "$CODEX_SKILLS_DIR/$skill_name" "Codex"
   fi
 done
 
