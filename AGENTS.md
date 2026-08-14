@@ -1,47 +1,61 @@
 # AGENTS.md
 
-Instructions and operating guidelines for AI coding agents (Antigravity, Claude Code, Codex) working in this repository.
+Guidance for coding agents working in this repository.
 
----
+## Overview
 
-## Repository Overview
+`setup-scripts` configures development environments on macOS and Ubuntu. Its
+installers may use the network, package managers, `sudo`, or files under
+`$HOME`, so understand their side effects before running them.
 
-This repository (`setup-scripts`) provides automated development environment setup, modular configuration, and AI agent extensions:
-- **`lib/`**: Reusable Bash utility libraries (`utils.sh`, `ui.sh`).
-- **`modules/`**: Setup modules for tools, shell, and AI agent skills/hooks (`modules/agents/`).
-- **`tools/agentkit/`**: Python CLI package managing commit timestamps, whitelists, handoff delegation, and repository configuration.
-- **`tests/`**: Automated test suites for shell scripts and Python packages.
+## Root layout
 
----
+- `setup.sh`: interactive entry point and module registration
+- `lib/`: shared Bash helpers
+- `modules/`: independently runnable setup modules
+- `config/`: configuration presets consumed by modules
+- `tools/`: installable CLI packages
+- `tests/`: shell and Python test suites
+- `docs/decisions/`: architecture decision records
+- `check.sh`: repository-wide format, lint, and test command
 
-## Core Guidelines & Workflow
+Do not document volatile subtree details here. If a directory needs detailed
+architecture or maintenance guidance, keep it in that directory's `README.md`
+and consult it before making changes there.
 
-### 1. Verification & Quality Assurance
+## Development guidelines
 
-Always run quality checks before finishing any task:
+- Put shared Bash primitives in `lib/`, tool-specific setup in `modules/`, and
+  reusable executable CLI behavior in `tools/`.
+- Agent skill files are workflow documentation; executable behavior belongs in
+  a CLI rather than `SKILL.md`.
+- Keep installers safe to re-run. Detect existing state, preserve unrelated
+  user configuration, and back up files before destructive replacement.
+- Derive paths from `BASH_SOURCE[0]`, quote paths and expansions, and handle
+  macOS and Ubuntu differences explicitly.
+- The `options`, `defaults`, and `scripts` arrays in `setup.sh` are positional.
+  Update all three together when changing module registration.
+- Respect existing ADRs and add one for significant, durable architecture
+  decisions.
+
+Do not run `setup.sh` or real installers as routine tests. Installer tests must
+isolate external effects with a temporary `HOME`, controlled `PATH`, fixtures,
+and stubbed commands.
+
+## Verification
+
+Run focused tests while iterating, then run the full check before finishing:
+
 ```bash
-# Automatically format code, auto-fix lint issues, and run all test suites
 ./check.sh
-
-# Verify-only mode (fails if unformatted/lint issues exist without modifying files)
-./check.sh --check
 ```
 
-- Python code formatting and linting are enforced via **Ruff** inside `tools/agentkit`.
-- Test suites must always pass (`tests/run-all.sh`).
+Use `./check.sh --check` when verification must not modify files. If `uv` is
+unavailable, Python checks are skipped; report that instead of claiming they
+passed.
 
-### 2. Architecture: Skills vs CLI Logic
+## Repository hygiene
 
-- **Skills are documentation**: Files in `modules/agents/skills/` (`SKILL.md`, `meta.yaml`) provide workflow guidance for AI agents.
-- **Executable logic belongs to CLIs**: All functional logic lives in `tools/agentkit/` and is installed via `uv tool install --editable`.
-- A `PATH` command (e.g. `agentkit`) resolves identically across different agent environments.
-- After adding or modifying skills, sync them using:
-  ```bash
-  bash modules/agents/skills/install.sh
-  ```
-
-### 3. Git & Working Tree Hygiene
-
-- Never commit temporary files, credential files (`.env`), test artifacts, or virtual environments (`.venv/`, `.ruff_cache/`, `.pytest_cache/`).
-- Respect existing directory layouts and ADR records under `docs/decisions/`.
-- Ensure changes are verified with `./check.sh` before finishing.
+- Preserve unrelated working-tree changes.
+- Do not commit credentials, environments, caches, or generated artifacts.
+- Do not commit or push unless explicitly asked.
