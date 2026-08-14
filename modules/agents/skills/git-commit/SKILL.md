@@ -102,24 +102,21 @@ git add path/to/file1 path/to/file2
 
 Follow the repository's onboarded language (`ko` vs `en`) and template.
 
-- **If Timeline is Enabled (`[ON]`)**:
-  Resolve the timestamp and commit in a single chained command:
-  ```bash
-  eval "$(agentkit commit-safe env)" && \
-  git commit -m "<subject matching repo template>" \
-    -m "[Optional 1-line overview of intent or motivation]" \
-    -m "- <Key change or reason 1>" \
-    -m "- <Key change or reason 2>"
-  ```
+Resolve the safe-mode environment, then commit. This applies with Timeline `[ON]`
+**and** `[OFF]`: the `env` call is what enforces the identity whitelist. When
+Timeline is `[OFF]` it simply exports no dates, so the commit uses the system
+clock — but skipping it would skip the whitelist check too.
 
-- **If Timeline is Disabled (`[OFF]`)**:
-  Execute standard git commit:
-  ```bash
-  git commit -m "<subject matching repo template>" \
-    -m "[Optional 1-line overview of intent or motivation]" \
-    -m "- <Key change or reason 1>" \
-    -m "- <Key change or reason 2>"
-  ```
+```bash
+safe_env="$(agentkit commit-safe env)" && eval "$safe_env" && \
+git commit -m "<subject matching repo template>" \
+  -m "[Optional 1-line overview of intent or motivation]" \
+  -m "- <Key change or reason 1>" \
+  -m "- <Key change or reason 2>"
+```
+
+(The capture-then-eval form matters: a plain `eval "$(…)"` discards the CLI's
+exit code, so a whitelist rejection would fall through to the commit anyway.)
 
 If multiple atomic units exist, repeat Steps 2–3 for each remaining set of changes until the working tree is clean.
 
