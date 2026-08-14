@@ -8,8 +8,8 @@ lines apart from the ones the delegated CLI printed.
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 
 @dataclass

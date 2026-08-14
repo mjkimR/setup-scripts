@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import click
 
-from ..agy import SETTINGS_PATH, grant as grant_rules, missing_rules
+from ..agy import SETTINGS_PATH, missing_rules
+from ..agy import grant as grant_rules
 from ..errors import ExitCode
 from ..handoff.tasks import COMMIT_GRANTS
 

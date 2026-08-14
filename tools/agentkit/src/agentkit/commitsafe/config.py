@@ -12,7 +12,6 @@ import os
 import re
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List
 
 from ..errors import ConfigError
 
@@ -28,13 +27,16 @@ DEFAULT_MIN_GAP_SECONDS = 30
 @dataclass
 class Config:
     path: Path
-    allowed_emails: List[str] = field(default_factory=list)
+    allowed_emails: list[str] = field(default_factory=list)
     timezone: str = DEFAULT_TIMEZONE
     start: str = DEFAULT_START
     end: str = DEFAULT_END
     min_gap_seconds: int = DEFAULT_MIN_GAP_SECONDS
+    whitelist_enabled: bool = True
 
     def allows(self, email: str) -> bool:
+        if not self.whitelist_enabled:
+            return True
         return email in self.allowed_emails
 
 
@@ -100,7 +102,7 @@ time:
     )
 
 
-def _emails(text: str) -> List[str]:
+def _emails(text: str) -> list[str]:
     block = re.search(r"allowed_emails:\s*\n((?:\s*-\s*[^\n]+\n?)+)", text)
     if not block:
         return []

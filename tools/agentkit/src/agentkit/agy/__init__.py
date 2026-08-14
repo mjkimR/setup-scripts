@@ -8,17 +8,17 @@ from .client import AgyClient, AgyRun
 from .permissions import (
     CONFIG_PATH,
     SETTINGS_PATH,
-    granted_rules,
     grant,
+    granted_rules,
     missing_rules,
 )
 
 __all__ = [
-    "AgyClient",
-    "AgyRun",
     "CONFIG_PATH",
     "SETTINGS_PATH",
-    "granted_rules",
+    "AgyClient",
+    "AgyRun",
     "grant",
+    "granted_rules",
     "missing_rules",
 ]

@@ -34,9 +34,7 @@ def summary() -> None:
     )
     _section(
         "Untracked Files",
-        gitutil.run(
-            ["ls-files", "--others", "--exclude-standard"], cwd=root
-        ).splitlines(),
+        gitutil.run(["ls-files", "--others", "--exclude-standard"], cwd=root).splitlines(),
         "(No untracked files)",
     )
 

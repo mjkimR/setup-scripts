@@ -16,7 +16,6 @@ from __future__ import annotations
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 from .. import gitutil
 from ..agy import AgyClient, AgyRun, missing_rules
@@ -31,16 +30,16 @@ DEFAULT_MAX_UNITS = 10
 class HandoffResult:
     exit_code: ExitCode
     units: int = 0
-    commits: List[str] = field(default_factory=list)
-    remaining: List[str] = field(default_factory=list)
+    commits: list[str] = field(default_factory=list)
+    remaining: list[str] = field(default_factory=list)
 
 
 def run_handoff(
     task: HandoffTask,
     *,
     client: AgyClient,
-    reporter: Optional[Reporter] = None,
-    repo: Optional[Path] = None,
+    reporter: Reporter | None = None,
+    repo: Path | None = None,
     max_units: int = DEFAULT_MAX_UNITS,
     verbose: bool = False,
 ) -> HandoffResult:
@@ -53,14 +52,10 @@ def run_handoff(
         return HandoffResult(ExitCode.OK)
 
     if task.per_unit:
-        out.note(
-            f"Delegating {len(pending)} pending file(s) to agy, "
-            "one atomic unit per call…"
-        )
+        out.note(f"Delegating {len(pending)} pending file(s) to agy, one atomic unit per call…")
     else:
         out.note(
-            f"Delegating {len(pending)} pending file(s) to agy "
-            f"(effort={client.effort}, timeout={client.timeout})…"
+            f"Delegating {len(pending)} pending file(s) to agy (effort={client.effort}, timeout={client.timeout})…"
         )
 
     result = HandoffResult(ExitCode.OK)
@@ -99,9 +94,7 @@ def run_handoff(
             return result
 
         rev_range = gitutil.commit_range(before, after)
-        lines = gitutil.log(
-            rev_range, task.log_format, date_format=task.date_format, cwd=root
-        )
+        lines = gitutil.log(rev_range, task.log_format, date_format=task.date_format, cwd=root)
         result.commits.extend(lines)
 
         if task.per_unit:
@@ -128,18 +121,13 @@ def run_handoff(
         return result
 
     if task.per_unit:
-        out.note(
-            f"Created {len(result.commits)} commit(s) across {result.units} unit(s). "
-            "Working tree is clean."
-        )
+        out.note(f"Created {len(result.commits)} commit(s) across {result.units} unit(s). Working tree is clean.")
     else:
         out.note("Working tree is clean.")
     return result
 
 
-def _preflight(
-    task: HandoffTask, *, client: AgyClient, repo: Optional[Path]
-) -> Path:
+def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Path:
     if not client.available:
         raise PreflightError(
             f"{client.executable} not found on PATH.",
@@ -187,10 +175,7 @@ def _report_nothing_happened(
         out.warn("See the agy output above for the cause.")
 
     if result.commits:
-        out.warn(
-            f"{len(result.commits)} commit(s) were already created "
-            "and are left in place."
-        )
+        out.warn(f"{len(result.commits)} commit(s) were already created and are left in place.")
     else:
         out.warn("The working tree was left untouched.")
     out.warn("No retry was attempted.")

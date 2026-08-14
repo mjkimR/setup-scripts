@@ -42,17 +42,19 @@ def verify() -> None:
     config, email = checked_identity()
     stamp = resolve(config, persist=False)
 
-    session = (
-        "1st of the day (random point in range)"
-        if stamp.first_of_day
-        else "subsequent (real elapsed time since the 1st)"
-    )
+    if not stamp.enabled:
+        session = "timeline disabled (using system clock)"
+    elif stamp.first_of_day:
+        session = "1st of the day (random point in range)"
+    else:
+        session = "subsequent (real elapsed time since the 1st)"
 
     click.echo("=== commit-safe pre-flight ===")
     click.echo(f"  Config:    {config.path}")
-    click.echo(f"  Email:     {email} (whitelisted)")
+    click.echo(f"  Email:     {email} (allowed)")
     click.echo(f"  Session:   {session}")
-    click.echo(f"  Range:     {config.start} ~ {config.end} ({config.timezone})")
+    if stamp.enabled:
+        click.echo(f"  Range:     {config.start} ~ {config.end} ({config.timezone})")
     click.echo(f"  Next time: {stamp.format()} (preview — not consumed)")
     click.echo("  Status:    passed")
 

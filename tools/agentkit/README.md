@@ -14,8 +14,9 @@ uv tool install --editable tools/agentkit
 ## Commands
 
 ```text
+agentkit commit onboard|analyze|config        per-repo config, onboarding, history analysis
 agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
-agentkit handoff commit [--safe]              delegate committing to the Antigravity CLI
+agentkit handoff commit [--safe/--plain]      delegate committing to the Antigravity CLI
 agentkit handoff tasks                        what can be handed off
 agentkit agy check|grant                      the allow-list headless agy needs
 agentkit git summary                          working tree overview
@@ -39,6 +40,7 @@ src/agentkit/
   cli.py          root command, error → exit code mapping
   errors.py       the exit-code contract
   gitutil.py      git helpers
+  repoconfig.py   per-repository configuration and history analysis
   ui.py           tagged console output
   agy/            Antigravity CLI adapter: invocation, log parsing, permissions
   handoff/        generic delegate-and-verify runner + the task registry

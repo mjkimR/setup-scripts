@@ -14,8 +14,8 @@ match `command(git commit)` at all.
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, List, Optional, Sequence, Set
 
 from ..errors import PreflightError
 
@@ -31,14 +31,14 @@ def settings_files() -> Sequence[Path]:
     return (SETTINGS_PATH, CONFIG_PATH)
 
 
-def granted_rules(paths: Optional[Sequence[Path]] = None) -> Set[str]:
+def granted_rules(paths: Sequence[Path] | None = None) -> set[str]:
     """Every allow rule found across agy's settings files.
 
     The two files do not share a schema, and the schema has changed between
     releases, so this collects any list of strings under an "allow" key at any
     depth rather than pinning one path into the document.
     """
-    found: Set[str] = set()
+    found: set[str] = set()
     for path in paths if paths is not None else settings_files():
         if not path.is_file():
             continue
@@ -52,13 +52,13 @@ def granted_rules(paths: Optional[Sequence[Path]] = None) -> Set[str]:
 
 def missing_rules(
     required: Iterable[str],
-    paths: Optional[Sequence[Path]] = None,
-) -> List[str]:
+    paths: Sequence[Path] | None = None,
+) -> list[str]:
     granted = granted_rules(paths)
     return [rule for rule in required if rule not in granted]
 
 
-def grant(rules: Iterable[str], *, settings_path: Optional[Path] = None) -> List[str]:
+def grant(rules: Iterable[str], *, settings_path: Path | None = None) -> list[str]:
     """Add rules to permissions.allow, backing the file up first.
 
     Returns the rules that were actually added; already-present ones are left
@@ -86,7 +86,7 @@ def grant(rules: Iterable[str], *, settings_path: Optional[Path] = None) -> List
     return added
 
 
-def _collect_allow(node, found: Set[str]) -> None:
+def _collect_allow(node, found: set[str]) -> None:
     if isinstance(node, dict):
         for key, value in node.items():
             if key == "allow" and isinstance(value, list):

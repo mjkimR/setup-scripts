@@ -8,6 +8,7 @@ from ..agy import AgyClient
 from ..agy.client import DEFAULT_EFFORT, DEFAULT_TIMEOUT
 from ..handoff import TASKS, get_task, run_handoff
 from ..handoff.runner import DEFAULT_MAX_UNITS
+from ..repoconfig import load_repo_config
 
 
 @click.group()
@@ -17,9 +18,10 @@ def handoff() -> None:
 
 @handoff.command("commit")
 @click.option(
-    "--safe",
-    is_flag=True,
-    help="Enforce the email whitelist and resolve a timestamp per atomic unit.",
+    "--safe/--plain",
+    "safe",
+    default=None,
+    help="Explicitly enforce or disable timeline/whitelist safe mode. Defaults to repo config if omitted.",
 )
 @click.option(
     "--effort",
@@ -51,7 +53,7 @@ def handoff() -> None:
 @click.pass_context
 def commit(
     ctx: click.Context,
-    safe: bool,
+    safe: bool | None,
     effort: str,
     timeout: str,
     max_units: int,
@@ -62,7 +64,13 @@ def commit(
     Exit codes: 0 committed (or nothing to commit), 1 no commit was created,
     2 commits were made but changes remain.
     """
-    task = get_task("commit-safe" if safe else "commit")
+    if safe is None:
+        repo_cfg = load_repo_config()
+        is_safe = repo_cfg.timeline.enabled if repo_cfg is not None else False
+    else:
+        is_safe = safe
+
+    task = get_task("commit-safe" if is_safe else "commit")
     result = run_handoff(
         task,
         client=AgyClient(effort=effort, timeout=timeout),

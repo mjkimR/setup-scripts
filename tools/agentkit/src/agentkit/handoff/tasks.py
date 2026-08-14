@@ -6,16 +6,17 @@ grants it needs, and whether the runner should drive it one unit at a time.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable, Dict, Optional, Tuple
 
 from ..commitsafe import checked_identity, resolve
+from ..repoconfig import load_repo_config
 
 # git ls-files is how the agent enumerates untracked files; without it a
 # repository with any untracked path stalls the run. Read-only, like the
 # log/diff/status rules that are usually already present.
-COMMIT_GRANTS: Tuple[str, ...] = (
+COMMIT_GRANTS: tuple[str, ...] = (
     "command(git add)",
     "command(git commit)",
     "command(git ls-files)",
@@ -40,27 +41,37 @@ class HandoffTask:
     tag: str
     skill: str
     instructions: str
-    grants: Tuple[str, ...] = ()
+    grants: tuple[str, ...] = ()
     per_unit: bool = False
     log_format: str = "%h  %s"
-    date_format: Optional[str] = None
+    date_format: str | None = None
     # Called once per invocation, before agy starts. Returns the environment to
     # hand over plus a short label for the progress line. Raising here aborts
     # before any quota is spent, which is the point for the safe variant.
-    env_factory: Optional[Callable[[], Tuple[Dict[str, str], str]]] = field(
-        default=None, repr=False
-    )
+    env_factory: Callable[[], tuple[dict[str, str], str]] | None = field(default=None, repr=False)
 
     def prompt(self, repo_root: Path) -> str:
+        repo_cfg = load_repo_config(cwd=repo_root)
+        conventions_note = ""
+        if repo_cfg is not None:
+            lang_note = "Korean (한국어)" if repo_cfg.conventions.language == "ko" else "English"
+            conventions_note = (
+                f"\n\nRepository Commit Conventions:\n"
+                f"- Preferred Language: {lang_note}\n"
+                f"- Style: {repo_cfg.conventions.style}\n"
+                f"- Template:\n{repo_cfg.conventions.template}\n"
+            )
+
         return (
             f"{self.skill}\n\n"
             f"Work only in {repo_root} — that is the repository to commit.\n\n"
             f"{_GIT_ONLY}\n\n"
             f"{self.instructions}"
+            f"{conventions_note}"
         )
 
 
-def _commit_safe_env() -> Tuple[Dict[str, str], str]:
+def _commit_safe_env() -> tuple[dict[str, str], str]:
     """Validate the identity and advance the timestamp for one unit."""
     config, _ = checked_identity()
     stamp = resolve(config)
@@ -101,7 +112,7 @@ COMMIT_SAFE = HandoffTask(
     ),
 )
 
-TASKS: Dict[str, HandoffTask] = {task.name: task for task in (COMMIT, COMMIT_SAFE)}
+TASKS: dict[str, HandoffTask] = {task.name: task for task in (COMMIT, COMMIT_SAFE)}
 
 
 def get_task(name: str) -> HandoffTask:

@@ -11,6 +11,7 @@ import click
 
 from . import __version__
 from .commands.agy import agy
+from .commands.commitcmd import commit_group
 from .commands.commitsafe import commit_safe
 from .commands.gitcmd import git_group
 from .commands.handoff import handoff
@@ -39,6 +40,7 @@ def cli() -> None:
     """Shared machinery for this repository's AI agent skills."""
 
 
+cli.add_command(commit_group)
 cli.add_command(commit_safe)
 cli.add_command(handoff)
 cli.add_command(agy)

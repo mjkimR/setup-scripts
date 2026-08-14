@@ -18,7 +18,6 @@ import subprocess
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Optional
 
 DEFAULT_EFFORT = "low"
 DEFAULT_TIMEOUT = "600s"
@@ -35,7 +34,7 @@ class AgyRun:
     output: str
     log: str
 
-    def denied_commands(self) -> List[str]:
+    def denied_commands(self) -> list[str]:
         """The commands `agy` refused, which only the log file names.
 
         stdout says merely that "a tool required the command permission". The
@@ -68,7 +67,7 @@ class AgyClient:
         prompt: str,
         *,
         add_dir: Path,
-        env: Optional[Dict[str, str]] = None,
+        env: dict[str, str] | None = None,
     ) -> AgyRun:
         # --add-dir is not optional. Without it agy resolves its own workspace
         # from its stored project list and runs commands in whatever repository

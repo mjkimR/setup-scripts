@@ -16,10 +16,10 @@ import time
 from dataclasses import dataclass
 from datetime import datetime, tzinfo
 from pathlib import Path
-from typing import Optional, Tuple
 from zoneinfo import ZoneInfo
 
-from .config import Config
+from ..repoconfig import load_repo_config
+from .config import Config, load_config
 
 STATE_ENV = "XDG_STATE_HOME"
 DEFAULT_STATE_HOME = Path.home() / ".local" / "state"
@@ -29,12 +29,17 @@ DEFAULT_STATE_HOME = Path.home() / ".local" / "state"
 class Stamp:
     when: datetime
     first_of_day: bool
+    enabled: bool = True
 
     def format(self) -> str:
+        if not self.enabled:
+            return f"{self.when.strftime('%Y-%m-%d %H:%M:%S %z')} (system clock / timeline disabled)"
         return self.when.strftime("%Y-%m-%d %H:%M:%S %z")
 
     def as_env(self) -> dict:
-        stamp = self.format()
+        if not self.enabled:
+            return {}
+        stamp = self.when.strftime("%Y-%m-%d %H:%M:%S %z")
         return {"GIT_AUTHOR_DATE": stamp, "GIT_COMMITTER_DATE": stamp}
 
 
@@ -44,22 +49,47 @@ def state_path() -> Path:
     return base / "git-commit-safe" / "state.json"
 
 
-def resolve(config: Config, *, persist: bool = True) -> Stamp:
+def resolve(
+    config: Config | None = None,
+    *,
+    persist: bool = True,
+    cwd: Path | None = None,
+) -> Stamp:
     """Resolve the timestamp for the next commit.
 
     `persist=False` previews the result without consuming it, which is what
     `verify` needs — checking should never advance the day's sequence.
     """
+    repo_cfg = load_repo_config(cwd=cwd)
+    if repo_cfg is not None:
+        if not repo_cfg.timeline.enabled:
+            tz = _timezone(repo_cfg.timeline.timezone)
+            return Stamp(when=datetime.now(tz), first_of_day=False, enabled=False)
+        config = Config(
+            path=repo_cfg.path,
+            allowed_emails=repo_cfg.whitelist.allowed_emails,
+            timezone=repo_cfg.timeline.timezone,
+            start=repo_cfg.timeline.start,
+            end=repo_cfg.timeline.end,
+            min_gap_seconds=repo_cfg.timeline.min_gap_seconds,
+        )
+    elif config is None:
+        config = load_config()
+
     tz = _timezone(config.timezone)
     now = datetime.now(tz)
     today = now.strftime("%Y-%m-%d")
     now_epoch = time.time()
 
     state = _load_state()
-    resumable = state.get("date") == today and {
-        "real_start_epoch",
-        "virtual_start_epoch",
-    } <= state.keys()
+    resumable = (
+        state.get("date") == today
+        and {
+            "real_start_epoch",
+            "virtual_start_epoch",
+        }
+        <= state.keys()
+    )
 
     if resumable:
         elapsed = max(0.0, now_epoch - state["real_start_epoch"])
@@ -70,9 +100,7 @@ def resolve(config: Config, *, persist: bool = True) -> Stamp:
         # that differ by less than min_gap_seconds, or to the very same second.
         last = state.get("last_virtual_epoch", state["virtual_start_epoch"])
         if target < last + config.min_gap_seconds:
-            target = last + random.randint(
-                config.min_gap_seconds, config.min_gap_seconds + 45
-            )
+            target = last + random.randint(config.min_gap_seconds, config.min_gap_seconds + 45)
 
         state["last_virtual_epoch"] = target
     else:
@@ -106,7 +134,7 @@ def _random_start(config: Config, now: datetime, tz: tzinfo) -> float:
     return random.uniform(epoch_start, epoch_end)
 
 
-def _hhmm(value: str) -> Tuple[int, int]:
+def _hhmm(value: str) -> tuple[int, int]:
     hour, minute = value.split(":")
     return int(hour), int(minute)
 
@@ -115,7 +143,7 @@ def _timezone(name: str) -> tzinfo:
     try:
         return ZoneInfo(name)
     except Exception:
-        local: Optional[tzinfo] = datetime.now().astimezone().tzinfo
+        local: tzinfo | None = datetime.now().astimezone().tzinfo
         assert local is not None
         return local
 
