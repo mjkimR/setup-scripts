@@ -1,0 +1,7 @@
+name: handoff-commit-safe
+description: Hands the git-commit-safe workflow off to the Antigravity CLI (agy) with pre-flight checks run locally
+
+targets:
+  - claude
+  - codex
+  # - antigravity   # agy runs git-commit-safe directly; handing off to itself is a loop
