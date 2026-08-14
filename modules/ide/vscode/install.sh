@@ -157,22 +157,22 @@ for idx in "${final_indices[@]}"; do
 
   # 2. settings.json Configuration
   if [ -f "$PROJECT_ROOT/config/vscode/settings.json" ]; then
-    if [ -f "$ide_path/settings.json" ]; then
-      log_info "Creating a backup of settings.json..."
-      cp "$ide_path/settings.json" "$ide_path/settings.json.bak"
+    if backup_file "$ide_path/settings.json"; then
+      cp "$PROJECT_ROOT/config/vscode/settings.json" "$ide_path/settings.json"
+      log_success "Successfully applied settings.json"
+    else
+      log_error "Skipping settings.json — could not back up the existing file."
     fi
-    cp "$PROJECT_ROOT/config/vscode/settings.json" "$ide_path/settings.json"
-    log_success "Successfully applied settings.json"
   fi
 
   # 3. keybindings.json Configuration
   if [ -f "$PROJECT_ROOT/config/vscode/keybindings.json" ]; then
-    if [ -f "$ide_path/keybindings.json" ]; then
-      log_info "Creating a backup of keybindings.json..."
-      cp "$ide_path/keybindings.json" "$ide_path/keybindings.json.bak"
+    if backup_file "$ide_path/keybindings.json"; then
+      cp "$PROJECT_ROOT/config/vscode/keybindings.json" "$ide_path/keybindings.json"
+      log_success "Successfully applied keybindings.json"
+    else
+      log_error "Skipping keybindings.json — could not back up the existing file."
     fi
-    cp "$PROJECT_ROOT/config/vscode/keybindings.json" "$ide_path/keybindings.json"
-    log_success "Successfully applied keybindings.json"
   fi
 
   # 4. Install Extensions

@@ -58,6 +58,43 @@ has_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
+# Back up <target> before overwriting it. The original is preserved once in
+# <target>.bak — never overwritten on re-runs, or the second run would replace
+# the user's original with our own copy — while <target>.bak.latest rolls.
+backup_file() { # backup_file <target>
+  local target="$1" original_backup latest_backup tmp
+  [ -f "$target" ] || return 0
+
+  original_backup="$target.bak"
+  latest_backup="$target.bak.latest"
+  if { [ -e "$original_backup" ] && [ ! -f "$original_backup" ]; } \
+    || { [ -e "$latest_backup" ] && [ ! -f "$latest_backup" ]; }; then
+    log_error "A backup path is not a regular file for $target"
+    return 1
+  fi
+
+  if [ ! -e "$original_backup" ]; then
+    if ! tmp=$(mktemp "$original_backup.tmp.XXXXXX") \
+      || ! cp -p "$target" "$tmp" \
+      || ! mv "$tmp" "$original_backup"; then
+      [ -z "${tmp:-}" ] || rm -f -- "$tmp"
+      log_error "Failed to preserve the original file at $original_backup"
+      return 1
+    fi
+    log_info "Preserved original file at $original_backup"
+  fi
+
+  tmp=""
+  if ! tmp=$(mktemp "$latest_backup.tmp.XXXXXX") \
+    || ! cp -p "$target" "$tmp" \
+    || ! mv "$tmp" "$latest_backup"; then
+    [ -z "$tmp" ] || rm -f -- "$tmp"
+    log_error "Failed to back up the current file at $latest_backup"
+    return 1
+  fi
+  log_info "Backed up the current file at $latest_backup"
+}
+
 # Cache sudo password if necessary
 sudo_keepalive() {
   if ! sudo -n true 2>/dev/null; then
