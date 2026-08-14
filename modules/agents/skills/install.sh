@@ -93,4 +93,51 @@ for skill_path in "${skill_dirs[@]}"; do
 done
 
 echo ""
+
+# --- Skill CLIs ------------------------------------------------------------
+#
+# Skills are documentation; anything they need to *do* lives in a uv tool under
+# tools/. A PATH command is the only reference that resolves identically from
+# Claude Code, Codex and Antigravity, which install skills to three different
+# places — so every package here is installed, not just the one skill in front
+# of us.
+
+if has_cmd uv; then
+  UV_BIN="uv"
+elif [ -x "$HOME/.local/bin/uv" ]; then
+  UV_BIN="$HOME/.local/bin/uv"
+else
+  UV_BIN=""
+fi
+
+for tool_dir in "$PROJECT_ROOT"/tools/*/; do
+  [ -f "${tool_dir}pyproject.toml" ] || continue
+  tool_name="$(basename "${tool_dir%/}")"
+
+  log_info "Installing skill CLI: ${BOLD}${tool_name}${NC}"
+
+  if [ -z "$UV_BIN" ]; then
+    log_warn "  ↳ uv not found. Skipping — install uv first, then re-run this module."
+    log_warn "    Without it, the commit skills will refuse to run."
+    continue
+  fi
+
+  # --editable so edits to this repository apply without reinstalling.
+  if install_output=$("$UV_BIN" tool install --force --editable "${tool_dir%/}" 2>&1); then
+    log_success "  ↳ Installed as an editable tool from: ${tool_dir%/}"
+  else
+    log_error "  ↳ uv tool install failed:"
+    printf '%s\n' "$install_output" | sed 's/^/        /' >&2
+  fi
+done
+
+if [ -n "$UV_BIN" ]; then
+  case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) log_warn "\$HOME/.local/bin is not on PATH. Run: $UV_BIN tool update-shell" ;;
+  esac
+fi
+
+echo ""
+
 log_success "All agent skills have been synchronized!"

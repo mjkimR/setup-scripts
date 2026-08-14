@@ -35,7 +35,7 @@ options=(
   "Configure Oh My Zsh & plugins"
   "Sync VS Code/Cursor/VSCodium configs & extensions"
   "Install agent notification hooks (Claude Code & Codex, macOS only)"
-  "Sync AI Agent skills (Antigravity, etc.)"
+  "Sync AI Agent skills & their CLIs (Antigravity, Claude Code, Codex)"
 )
 
 # Default checkboxes (true for essential tools, false for optional candidates)
