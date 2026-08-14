@@ -11,6 +11,11 @@ This skill enforces strict safety pre-flight checks (email whitelist verificatio
 
 ## Core Principles
 
+0. **Handoff Mode (Check This First)**:
+   - If `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` are **already set in your environment**, you were invoked through `/handoff-commit-safe`. The caller has already verified the email whitelist and resolved the timestamp.
+   - In that case: **skip Principles 1–3 and Steps 1 and 4 entirely.** Do not run the pre-flight script, do not resolve or set any dates. Just `git add` and plain `git commit` — the dates are inherited.
+   - Check with `printenv GIT_AUTHOR_DATE`. Everything else in this skill still applies.
+
 1. **Pre-flight Configuration Verification**:
    - Check if `~/.config/git-commit-safe/config.yaml` exists.
    - If missing or invalid, **abort immediately** with a clear error and instruct the user to follow [references/onboard.md](./references/onboard.md).
@@ -36,9 +41,12 @@ This skill enforces strict safety pre-flight checks (email whitelist verificatio
 ## Step-by-Step Workflow
 
 ### Step 1: Pre-flight Verification
-Run the pre-flight verification script to check config, email whitelist, and resolve timestamps:
+
+*Skip this step entirely in handoff mode (Core Principle 0).*
+
+Run the pre-flight verification script to check config, email whitelist, and resolve timestamps. Use the skill's installed location — the path below is absolute because the working directory is the target repository, not this skill:
 ```bash
-bash modules/agents/skills/git-commit-safe/scripts/verify-safe.sh
+bash ~/.gemini/config/skills/git-commit-safe/scripts/verify-safe.sh
 ```
 
 - **If exit code is 2 (Config Missing)**:
@@ -67,17 +75,27 @@ git add path/to/file1 path/to/file2
 ```
 
 ### Step 4: Execute Commit with Safe Timestamp & Identity
-Load the verified environment variables and execute the commit:
+
+**In handoff mode** (Core Principle 0), the dates are already in your environment. Commit plainly:
 
 ```bash
-eval "$(bash modules/agents/skills/git-commit-safe/scripts/verify-safe.sh --env)" && \
 git commit -m "<subject matching detected repo style>" \
   -m "[Optional 1-line overview explaining intent]" \
   -m "- <Key change 1>" \
   -m "- <Key change 2>"
 ```
 
-Repeat Steps 3–4 for any remaining atomic change groups until the working tree is clean.
+**Otherwise**, load the verified environment variables first:
+
+```bash
+eval "$(bash ~/.gemini/config/skills/git-commit-safe/scripts/verify-safe.sh --env)" && \
+git commit -m "<subject matching detected repo style>" \
+  -m "[Optional 1-line overview explaining intent]" \
+  -m "- <Key change 1>" \
+  -m "- <Key change 2>"
+```
+
+Repeat Steps 3–4 for any remaining atomic change groups until the working tree is clean — **unless the prompt asked for exactly one atomic unit**, in which case stop after the first commit and leave the rest uncommitted.
 
 ### Step 5: Verify
 Confirm the newly created commit and timestamps:

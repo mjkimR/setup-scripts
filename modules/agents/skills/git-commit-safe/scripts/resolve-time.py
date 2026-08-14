@@ -190,6 +190,10 @@ def resolve():
         print(f'export GIT_AUTHOR_DATE="{formatted_date}"')
         print(f'export GIT_COMMITTER_DATE="{formatted_date}"')
         print(f'export GIT_COMMIT_SAFE_EMAIL="{current_email}"')
+    elif mode == "--stamp":
+        # Bare timestamp, for callers that assign it directly instead of
+        # eval-ing shell exports. Validation and state advance are identical.
+        print(formatted_date)
     else:
         commit_type = "Today's 1st Commit (Random Base within Range)" if is_first_commit_today else "Today's Subsequent Commit (Accumulated Real Elapsed Time)"
         print("=== git-commit-safe Preflight Verification ===")
