@@ -1,1 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+.venv/
+*.pyc
+.pytest_cache/
+
+# IDE configs
+.idea/
+.vscode/
+
+# local skill assets & temp files
+.agents/
+.claude/
 .cache/
+.local/
+
+# Local environment configs
+.env
