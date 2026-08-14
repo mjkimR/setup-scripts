@@ -50,7 +50,9 @@ def load_config() -> Config:
     if not path.is_file():
         raise ConfigError(
             f"commit-safe config not found at: {path}",
-            "Run `agentkit commit-safe init` to create one.",
+            fix="agentkit commit-safe init",
+            what_to_report="commit-safe configuration file is missing. Proceed with creating one?",
+            details=["Run `agentkit commit-safe init` to create one."],
         )
 
     text = path.read_text(encoding="utf-8")
@@ -72,7 +74,9 @@ def load_config() -> Config:
     if not config.allowed_emails:
         raise ConfigError(
             f"no allowed_emails listed in: {path}",
-            "Add at least one address, or re-run `agentkit commit-safe init --force`.",
+            fix="agentkit commit-safe init --force",
+            what_to_report="No allowed emails found in commit-safe configuration.",
+            details=["Add at least one address, or re-run `agentkit commit-safe init --force`."],
         )
 
     return config

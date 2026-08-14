@@ -7,11 +7,16 @@ reads as "no changes".
 
 from __future__ import annotations
 
+import re
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
 
-from .errors import PreflightError
+from .errors import GitCommandError, GitLockError, NotAGitRepoError
+
+# `fatal: Unable to create '<path>/index.lock': File exists.` followed by
+# `Another git process seems to be running in this repository`.
+_LOCK_MARKER = re.compile(r"\.lock': File exists|another git process", re.IGNORECASE)
 
 
 def run(args: Sequence[str], *, cwd: Path | None = None) -> str:
@@ -22,15 +27,37 @@ def run(args: Sequence[str], *, cwd: Path | None = None) -> str:
         text=True,
     )
     if result.returncode != 0:
-        raise PreflightError(f"git {' '.join(args)} failed: {result.stderr.strip() or result.returncode}")
+        detail = result.stderr.strip() or str(result.returncode)
+        command = f"git {' '.join(args)}"
+        if _LOCK_MARKER.search(detail):
+            # Somebody else is mid-write. Nothing here is broken and nothing to
+            # repair — the lock clears on its own once they finish.
+            raise GitLockError(
+                f"{command} could not take the index lock.",
+                retry_after="the other git process releases the lock (usually seconds)",
+                what_to_report="Another git process is holding the repository lock, so nothing could run.",
+                details=[detail],
+            )
+        raise GitCommandError(
+            f"{command} failed: {detail}",
+            what_to_report=f"A git command failed unexpectedly: {command}.",
+            details=[detail],
+        )
     return result.stdout
 
 
 def repo_root(cwd: Path | None = None) -> Path:
     try:
         return Path(run(["rev-parse", "--show-toplevel"], cwd=cwd).strip())
-    except PreflightError as error:
-        raise PreflightError("not inside a git repository.") from error
+    except GitCommandError as error:
+        raise NotAGitRepoError(
+            "not inside a git repository.",
+            what_to_report=(
+                "This directory is not inside a git repository. Ask the user where to run, "
+                "or whether to create one — do not run `git init` on your own."
+            ),
+            details=[str(error)],
+        ) from error
 
 
 def head_sha(cwd: Path | None = None) -> str:

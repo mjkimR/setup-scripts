@@ -25,6 +25,8 @@ DEFAULT_TIMEOUT = "600s"
 _DENIED_COMMAND = re.compile(r'permission check failed for command "([^"]*)"')
 _DENIAL_MARKER = re.compile(r"headless mode cannot prompt", re.IGNORECASE)
 _AUTH_MARKER = re.compile(r"auth|login|credential|unauthenticated|token", re.IGNORECASE)
+_QUOTA_MARKER = re.compile(r"quota|rate.?limit|resource.?exhausted|too many requests|usage limit", re.IGNORECASE)
+_TIMEOUT_MARKER = re.compile(r"\btimed? ?out\b|deadline exceeded", re.IGNORECASE)
 
 
 @dataclass
@@ -50,6 +52,14 @@ class AgyRun:
     @property
     def looks_unauthenticated(self) -> bool:
         return bool(_AUTH_MARKER.search(self.output))
+
+    @property
+    def looks_quota_limited(self) -> bool:
+        return bool(_QUOTA_MARKER.search(self.output))
+
+    @property
+    def looks_timed_out(self) -> bool:
+        return bool(_TIMEOUT_MARKER.search(self.output))
 
 
 @dataclass

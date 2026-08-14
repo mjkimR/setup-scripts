@@ -139,7 +139,9 @@ def load_repo_config(cwd: Path | None = None, *, auto_migrate: bool = False) -> 
     except (json.JSONDecodeError, OSError) as error:
         raise ConfigError(
             f"failed to read repository commit config at {path}: {error}",
-            "Fix the JSON syntax or re-run onboarding.",
+            fix="agentkit commit onboard --force",
+            what_to_report="Repository commit configuration file is corrupted.",
+            details=["Fix the JSON syntax or re-run onboarding: `agentkit commit onboard --force`."],
         ) from error
 
 

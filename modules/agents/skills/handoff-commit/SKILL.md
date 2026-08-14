@@ -27,8 +27,9 @@ cancels out the reason for delegating.
 
 - Do NOT read diffs, group changes, or draft commit messages. `agy` does all of it.
 - Do NOT run `git add` or `git commit` yourself, before or after the handoff.
-- Do NOT retry on failure. A failed handoff may have committed part of the work,
-  and a blind retry risks duplicate or polluted commits. Report and stop.
+- Do NOT decide for yourself whether to retry. A failed handoff may have
+  committed part of the work, and a blind retry risks duplicate or polluted
+  commits. The `[ACTION]` line states whether a retry is authorized; follow it.
 - The handoff is synchronous and blocking. Make no other tool calls while it runs.
 
 ## Workflow
@@ -55,15 +56,35 @@ the command already derived from git, padded with absolute `file://` links, and
 it is the unbounded part of the output. Failures and partial commits print it in
 full. Do not pass `--verbose` unless you are debugging the handoff itself.
 
-### Step 2: Report the result
+### Step 2: Follow the directive, then report
 
-Relay what the command printed. Do not re-verify with your own `git log`.
+On success, relay the commit hashes and subjects it listed. Do not re-verify
+with your own `git log`.
 
-| Exit code | Meaning | What to report |
-|---|---|---|
-| 0 | Success, or nothing to commit | The commit hashes and subjects it listed |
-| 1 | No commit was created | The cause line it printed, plus its suggested fix |
-| 2 | Committed, but files remain uncommitted | The commits made *and* the leftover files |
+On failure it prints a block that already states the directive in full. Do what
+the `[ACTION]` line says and relay the `[REPORT]` line, which is written for the
+user:
+
+```
+[handoff] [ERROR]  (QUOTA_EXHAUSTED) agy reported a usage limit.
+[handoff] [ACTION] DEFER — Nothing is broken and nothing here is yours to fix.
+                   Do not retry now. Report the cause and when it can be retried.
+[handoff] [WHEN]   Not before: the Antigravity rolling quota window resets (up to 5h)
+[handoff] [REPORT] Antigravity quota is exhausted; no commits were created. It will reset over time.
+[handoff] [DETAIL] Nothing is misconfigured — the limit is time-based.
+```
+
+There is no table of modes here on purpose. The block is self-contained, so
+treat it as the authority — if it ever contradicts this file, the block wins and
+this file is stale.
+
+One thing the block cannot know is what this skill is allowed to run: only
+`agentkit …`, `git status` and `git log`. When a `[FIX]` command falls outside
+that, hand it to the user instead of running it.
+
+Exit codes carry the same news for anything reading only a number: `0` success
+or nothing to commit, `1` nothing was committed, `2` committed with files left
+over, `64` a malformed command line — which is a bug in this skill, so report it.
 
 Keep the report short: number of commits, each hash and subject, and any
 remaining uncommitted files.
@@ -79,5 +100,7 @@ remaining uncommitted files.
   `agentkit agy grant`; check with `agentkit agy check`. The runner refuses to
   start without them.
 - **Quota.** Each handoff spends Antigravity quota on a five-hour rolling limit.
-  Keep it user-triggered; do not put it in a loop or on a schedule.
+  Keep it user-triggered; do not put it in a loop or on a schedule. A spent
+  quota comes back as `[ACTION] DEFER` — report it and leave the retry to the
+  user, because retrying is exactly what runs the limit down further.
 - Verified against `agy` 1.1.12. Re-test after a CLI update.

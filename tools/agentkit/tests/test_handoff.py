@@ -115,8 +115,67 @@ def test_an_authentication_failure_is_named(repo, granted, stub_agy, pending_fil
 
     result = run(COMMIT, repo, stub_agy)
 
+    reported = capsys.readouterr().err
     assert result.exit_code == ExitCode.FAILED
-    assert "authentication failure" in capsys.readouterr().err
+    assert "authentication failure" in reported
+    # The stub also says "timed out"; the specific cause has to win.
+    assert "(AGY_UNAUTHENTICATED)" in reported
+    assert "AGY_TIMEOUT" not in reported
+
+
+def test_a_spent_quota_tells_the_caller_to_wait_rather_than_stop(repo, granted, stub_agy, pending_file, capsys):
+    pending_file("a.txt")
+    stub_agy.mode("quota")
+
+    result = run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr().err
+    assert result.exit_code == ExitCode.FAILED
+    assert "(QUOTA_EXHAUSTED)" in reported
+    assert "[ACTION] DEFER" in reported
+    assert "Not before:" in reported
+
+
+def test_a_timeout_defers_only_while_nothing_was_committed(repo, granted, stub_agy, pending_file, capsys):
+    pending_file("a.txt")
+    stub_agy.mode("timeout")
+
+    result = run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr().err
+    assert result.exit_code == ExitCode.FAILED
+    assert result.commits == []
+    assert "(AGY_TIMEOUT)" in reported
+    assert "[ACTION] DEFER" in reported
+
+
+@pytest.mark.parametrize("stub_mode", ["none", "auth", "quota", "timeout"])
+def test_an_earlier_commit_downgrades_every_cause_to_halt(stub_mode, capsys):
+    """Whatever stopped agy, half-done work makes acting on it the user's call.
+
+    Only AUTO authorizes a retry, so no cause may reach AUTO/DEFER once an
+    earlier unit has committed — otherwise the skill would be told to re-run a
+    handoff that already changed the repository.
+    """
+    from agentkit.agy import AgyRun
+    from agentkit.handoff.runner import HandoffResult, _report_nothing_happened
+    from agentkit.ui import Reporter
+
+    outputs = {
+        "none": "a tool required the command permission, but headless mode cannot prompt",
+        "auth": "authentication failed",
+        "quota": "RESOURCE_EXHAUSTED: usage limit reached",
+        "timeout": "deadline exceeded while generating the commit",
+    }
+    run_result = AgyRun(output=outputs[stub_mode], log="")
+    already = HandoffResult(ExitCode.FAILED, units=2, commits=["abc1234 feat: earlier unit"])
+
+    _report_nothing_happened(Reporter("handoff"), run_result, already, COMMIT_SAFE, verbose=True)
+
+    reported = capsys.readouterr().err
+    assert "[ACTION] HALT" in reported
+    assert "[ACTION] AUTO" not in reported
+    assert "[ACTION] DEFER" not in reported
 
 
 def test_missing_grants_abort_before_any_call(repo, stub_agy, pending_file, tmp_path, monkeypatch):

@@ -19,12 +19,32 @@ from pathlib import Path
 
 from .. import gitutil
 from ..agy import AgyClient, AgyRun, missing_rules
-from ..errors import ConfigError, ExitCode, PreflightError
+from ..errors import (
+    Actor,
+    Advisory,
+    AgyNotInstalledError,
+    AgyPermissionError,
+    ErrorCode,
+    ExitCode,
+    NotOnboardedError,
+    Retry,
+)
 from ..repoconfig import load_repo_config, repo_config_path
 from ..ui import Reporter
 from .tasks import HandoffTask
 
 DEFAULT_MAX_UNITS = 10
+
+
+def _advise(out: Reporter, advisory: Advisory, message: str | None = None) -> None:
+    """Print an advisory for a path that reports rather than raises.
+
+    Same block the CLI prints for an exception, so the calling agent does not
+    have to learn two formats depending on whether the tool died or merely
+    stopped short.
+    """
+    for line in advisory.lines(message):
+        out.warn(line)
 
 
 @dataclass
@@ -65,9 +85,21 @@ def run_handoff(
     while True:
         result.units += 1
         if task.per_unit and result.units > max_units:
-            out.error(f"stopped after {max_units} units with changes still pending.")
-            out.warn("Raise --max-units if the split is legitimately this large.")
             result.remaining = gitutil.pending(cwd=root)
+            _advise(
+                out,
+                Advisory(
+                    code=ErrorCode.MAX_UNITS_EXCEEDED,
+                    actor=Actor.USER,
+                    retry=Retry.UNSAFE,
+                    what_to_report=(
+                        f"Loop guard halted handoff at {max_units} units. "
+                        f"{len(result.commits)} commit(s) were created; the files below remain uncommitted."
+                    ),
+                    details=("Raise --max-units only if the split is legitimately this large.",),
+                ),
+                f"stopped after {max_units} units with changes still pending.",
+            )
             out.detail(result.remaining, stream=sys.stderr)
             result.exit_code = ExitCode.INCOMPLETE
             return result
@@ -116,7 +148,18 @@ def run_handoff(
         # agy gave for stopping short is worth the tokens here.
         if not verbose:
             out.block("agy output", run.output)
-        out.note("WARNING: uncommitted changes remain:")
+        _advise(
+            out,
+            Advisory(
+                code=ErrorCode.PARTIAL_COMMITS,
+                actor=Actor.NONE,
+                retry=Retry.UNSAFE,
+                what_to_report=(
+                    f"{len(result.commits)} commit(s) were created, but the files below remain uncommitted."
+                ),
+            ),
+            "uncommitted changes remain after the handoff.",
+        )
         out.detail(result.remaining)
         result.exit_code = ExitCode.INCOMPLETE
         return result
@@ -130,9 +173,12 @@ def run_handoff(
 
 def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Path:
     if not client.available:
-        raise PreflightError(
+        # No `fix`: installing the CLI is not a command this tool can hand the
+        # agent to run. `fix` is a runnable command or nothing.
+        raise AgyNotInstalledError(
             f"{client.executable} not found on PATH.",
-            "Install the Antigravity CLI first.",
+            what_to_report="Antigravity CLI (agy) is not installed; cannot run handoff.",
+            details=[f"Install the Antigravity CLI and make sure `{client.executable}` is on PATH."],
         )
 
     root = repo or gitutil.repo_root()
@@ -141,10 +187,14 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
     if task.name in ("commit", "commit-safe"):
         repo_cfg = load_repo_config(cwd=root)
         if repo_cfg is None:
-            raise ConfigError(
+            raise NotOnboardedError(
                 f"repository is not onboarded: {repo_config_path(cwd=root)} not found.",
-                "Run `agentkit commit onboard` to initialize configuration with auto-detected settings.",
-                "Or ask the user for preferences: whitelist, timeline, language (ko/en), style.",
+                fix="agentkit commit onboard",
+                what_to_report="Repository commit configuration is required. Proceed with onboarding using default settings?",
+                details=[
+                    "Run `agentkit commit onboard` to initialize configuration with auto-detected settings.",
+                    "Or ask the user for preferences: whitelist, timeline, language (ko/en), style.",
+                ],
             )
 
     # Refuse to start without the grants rather than discovering it after a
@@ -152,10 +202,14 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
     # missing grant otherwise looks like "the model decided not to commit".
     missing = missing_rules(task.grants)
     if missing:
-        raise PreflightError(
+        raise AgyPermissionError(
             "agy is missing required permission grants: " + ", ".join(missing),
-            "Headless agy cannot prompt, so it would silently commit nothing.",
-            "Fix: agentkit agy grant",
+            fix="agentkit agy grant",
+            what_to_report="agy execution permissions are missing; authorization is required.",
+            details=[
+                "Headless agy cannot prompt, so it would silently commit nothing.",
+                f"Missing grants: {', '.join(missing)}",
+            ],
         )
 
     return root
@@ -175,18 +229,73 @@ def _report_nothing_happened(
     where = f"unit {result.units}" if task.per_unit else "agy"
     out.error(f"{where} produced no commit — HEAD did not move.")
 
-    if run.hit_permission_wall:
-        out.warn("Cause: a command was auto-denied for lack of permission:")
-        out.detail(run.denied_commands() or ["(agy's log named none)"], stream=sys.stderr)
-        out.warn("Fix:   agentkit agy grant")
-    elif run.looks_unauthenticated:
-        out.warn("Cause: looks like an authentication failure.")
-        out.warn("Fix:   run `agy` interactively once to refresh the login.")
-    else:
-        out.warn("See the agy output above for the cause.")
-
     if result.commits:
-        out.warn(f"{len(result.commits)} commit(s) were already created and are left in place.")
+        left = f"{len(result.commits)} commit(s) were already created and are left in place."
     else:
-        out.warn("The working tree was left untouched.")
-    out.warn("No retry was attempted.")
+        left = "The working tree was left untouched."
+
+    # HEAD did not move, so this round committed nothing and the cause below
+    # decides what happens next. Once an earlier unit has committed, though,
+    # that half-done work outranks the cause: acting on any of these means
+    # re-running the handoff, and that call belongs to the user. Both axes
+    # collapse to UNSAFE, and every branch derives HALT.
+    after_fix = Retry.UNSAFE if result.commits else Retry.AFTER_FIX
+    wait_it_out = Retry.UNSAFE if result.commits else Retry.SAFE
+
+    if run.hit_permission_wall:
+        denied = tuple(f"Denied: {cmd}" for cmd in run.denied_commands() or ["(agy's log named none)"])
+        cause = "a command was auto-denied for lack of permission."
+        advisory = Advisory(
+            code=ErrorCode.AGY_PERMISSION_DENIED,
+            actor=Actor.TOOL,
+            retry=after_fix,
+            fix="agentkit agy grant",
+            what_to_report="agy execution permission was denied; no commits were created.",
+            details=(*denied, left, "No retry was attempted."),
+        )
+    elif run.looks_quota_limited:
+        # Before the auth check: a spent-quota message routinely says "token".
+        cause = "agy reported a usage limit."
+        advisory = Advisory(
+            code=ErrorCode.QUOTA_EXHAUSTED,
+            actor=Actor.NONE,
+            retry=wait_it_out,
+            retry_after="the Antigravity rolling quota window resets (up to 5h)",
+            what_to_report="Antigravity quota is exhausted; no commits were created. It will reset over time.",
+            details=("Nothing is misconfigured — the limit is time-based.", left, "No retry was attempted."),
+        )
+    elif run.looks_unauthenticated:
+        cause = "looks like an authentication failure."
+        advisory = Advisory(
+            code=ErrorCode.AGY_UNAUTHENTICATED,
+            actor=Actor.USER,
+            retry=after_fix,
+            what_to_report="agy authentication appears to have expired; please refresh the login.",
+            details=("Run `agy` interactively once to refresh the login.", left, "No retry was attempted."),
+        )
+    elif run.looks_timed_out:
+        # Last of the recognizers: "timed out" is the phrase most likely to turn
+        # up inside a message whose real cause is one of the ones above.
+        cause = "agy timed out before it committed."
+        advisory = Advisory(
+            code=ErrorCode.AGY_TIMEOUT,
+            actor=Actor.NONE,
+            retry=wait_it_out,
+            what_to_report="agy timed out before completing. If the changes are too large, split them and try again.",
+            details=(
+                "A larger --timeout, or a smaller change set, is the usual answer.",
+                left,
+                "No retry was attempted.",
+            ),
+        )
+    else:
+        cause = "agy gave no recognizable reason."
+        advisory = Advisory(
+            code=ErrorCode.NO_COMMITS_CREATED,
+            actor=Actor.NONE,
+            retry=Retry.UNSAFE,
+            what_to_report="agy failed to create commits. See the agy output above for the cause.",
+            details=("See the agy output above for the cause.", left, "No retry was attempted."),
+        )
+
+    _advise(out, advisory, cause)

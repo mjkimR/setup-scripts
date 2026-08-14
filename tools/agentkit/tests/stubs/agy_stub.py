@@ -69,7 +69,17 @@ def main() -> int:
         return 0
 
     if mode == "auth":
+        # Names both causes on purpose: auth is the more specific one and has to
+        # win over the timeout recognizer.
         print("authentication failed or timed out")
+        return 0
+
+    if mode == "quota":
+        print("RESOURCE_EXHAUSTED: usage limit reached, token budget spent")
+        return 0
+
+    if mode == "timeout":
+        print("deadline exceeded while generating the commit")
         return 0
 
     pending = [line[3:] for line in git("status", "--porcelain").splitlines()]
