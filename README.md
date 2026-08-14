@@ -53,7 +53,7 @@ Before running the script, you can adjust the configs inside the `config/` direc
 
 ## Agent Notification Hooks (macOS)
 
-`modules/agents/notify/install.sh` gives Claude Code and Codex CLI a single
+`modules/agents/hooks/notify/install.sh` gives Claude Code and Codex CLI a single
 notification format, delivered through `terminal-notifier`:
 
 ```text
@@ -108,7 +108,7 @@ The installer skips either agent that is not installed.
 
 Open Codex's `/hooks` menu once after installation to review and trust the new
 `UserPromptSubmit` and `PermissionRequest` hooks. The hook scripts ship
-alongside the installer in `modules/agents/notify/` and are copied to
+alongside the installer in `modules/agents/hooks/notify/` and are copied to
 `~/.local/bin/`. The debug log at
 `~/.local/state/agent-notify/notify.log` includes each removal's group and exit
 code, making stale-banner failures distinguishable from missing hooks.

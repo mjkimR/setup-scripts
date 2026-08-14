@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-INSTALLER="$PROJECT_ROOT/modules/agents/notify/install.sh"
+INSTALLER="$PROJECT_ROOT/modules/agents/hooks/notify/install.sh"
 MANAGED_COMMAND='"$HOME/.local/bin/agent-notify.sh" claude input'
 MANAGED_MATCHER='permission_prompt|elicitation_dialog'
 

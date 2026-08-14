@@ -4,7 +4,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-SOURCE_NOTIFY="$PROJECT_ROOT/modules/agents/notify/agent-notify.sh"
+SOURCE_NOTIFY="$PROJECT_ROOT/modules/agents/hooks/notify/agent-notify.sh"
 FAKE_NOTIFIER="$SCRIPT_DIR/fixtures/fake-notifier.sh"
 REJECT_NOTIFIER="$SCRIPT_DIR/fixtures/reject-notifier.sh"
 

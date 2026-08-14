@@ -1,0 +1,7 @@
+name: notify
+description: macOS notification hooks for terminal AI agents (Claude Code & Codex)
+
+targets:
+  - claude
+  - codex
+  # - antigravity
