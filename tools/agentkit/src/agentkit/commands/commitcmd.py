@@ -194,8 +194,13 @@ def _set_nested(cfg: RepoConfig, key: str, value: str) -> None:
 
 
 def _coerce(value: str, target_type: type | None = None) -> Any:
-    if target_type is bool or value.lower() in ("true", "false", "yes", "no", "1", "0", "on", "off"):
-        return value.lower() in ("true", "yes", "1", "on")
+    # Only a bool-typed field may word-match: without the type gate, string
+    # values like "no" (a language) or int values like "0" turn into booleans.
+    if target_type is bool:
+        lowered = value.lower()
+        if lowered not in ("true", "false", "yes", "no", "1", "0", "on", "off"):
+            raise click.ClickException(f"Expected a boolean value, got: {value}")
+        return lowered in ("true", "yes", "1", "on")
     if target_type is int:
         return int(value)
     return value
