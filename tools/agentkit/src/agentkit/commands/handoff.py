@@ -6,6 +6,7 @@ import click
 
 from ..agy import AgyClient
 from ..agy.client import DEFAULT_EFFORT, DEFAULT_TIMEOUT
+from ..errors import ConfigError
 from ..handoff import TASKS, get_task, run_handoff
 from ..handoff.runner import DEFAULT_MAX_UNITS
 from ..repoconfig import load_repo_config
@@ -64,11 +65,23 @@ def commit(
     Exit codes: 0 committed (or nothing to commit), 1 no commit was created,
     2 commits were made but changes remain.
     """
-    if safe is None:
-        repo_cfg = load_repo_config()
-        is_safe = repo_cfg.timeline.enabled if repo_cfg is not None else False
-    else:
-        is_safe = safe
+    repo_cfg = load_repo_config()
+    timeline_on = repo_cfg is not None and repo_cfg.timeline.enabled
+    is_safe = timeline_on if safe is None else safe
+
+    # An explicit --safe on a timeline-disabled repo would run the safe task
+    # with an empty timestamp env while its prompt claims the dates are set —
+    # every commit would silently land on the system clock.
+    if safe and repo_cfg is not None and not repo_cfg.timeline.enabled:
+        raise ConfigError(
+            "--safe was requested, but this repository's timeline is disabled, so no timestamps would be injected.",
+            fix="agentkit commit config --set timeline.enabled=true",
+            what_to_report=(
+                "Safe mode was requested but the repository timeline is disabled; commits would use the "
+                "system clock. The user must choose: enable the timeline, or rerun without --safe."
+            ),
+            details=["Enable it with the fix command, or drop --safe to use plain mode deliberately."],
+        )
 
     task = get_task("commit-safe" if is_safe else "commit")
     result = run_handoff(

@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .. import gitutil
 from ..agy import AgyClient, AgyRun, missing_rules
+from ..commitsafe import checked_identity
 from ..errors import (
     Actor,
     Advisory,
@@ -117,7 +118,9 @@ def run_handoff(
 
         if before == after:
             _report_nothing_happened(out, run, result, task, verbose=verbose)
-            result.exit_code = ExitCode.FAILED
+            # FAILED promises "nothing was committed"; once earlier units have
+            # committed, that number would invite a duplicate whole-handoff re-run.
+            result.exit_code = ExitCode.INCOMPLETE if result.commits else ExitCode.FAILED
             return result
 
         rev_range = gitutil.commit_range(before, after)
@@ -190,6 +193,10 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
                     "Or ask the user for preferences: whitelist, timeline, language (ko/en), style.",
                 ],
             )
+        # The whitelist is a guardrail of its own, not a timeline feature: it
+        # must hold for the plain task too, or disabling the timeline would
+        # silently disable identity checking with it.
+        checked_identity(cwd=root)
 
     # Check required permission grants before invoking agy.
     missing = missing_rules(task.grants)

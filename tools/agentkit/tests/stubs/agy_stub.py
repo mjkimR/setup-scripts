@@ -6,6 +6,8 @@ according to $AGY_STUB_MODE:
 
     all   commit every pending path (the cooperative case)
     one   commit a single path, leaving the rest (a partial handoff)
+    first commit a single path on the first call, then stall on every later
+          call (a per-unit run that dies mid-way)
     none  commit nothing and report a permission denial the way headless agy
           does — cleanly, on stdout, with exit code 0
 """
@@ -57,6 +59,15 @@ def main() -> int:
         )
 
     mode = os.environ.get("AGY_STUB_MODE", "all")
+
+    if mode == "first":
+        # This very call is already recorded, so >1 means a later call.
+        with open(os.environ["AGY_STUB_CALLS"], encoding="utf-8") as handle:
+            calls = sum(1 for line in handle if line.strip())
+        if calls > 1:
+            print("stub: refusing to commit any further units")
+            return 0
+        mode = "one"
 
     if mode == "none":
         print("a tool required the command permission, but headless mode cannot prompt")

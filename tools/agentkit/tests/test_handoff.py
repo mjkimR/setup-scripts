@@ -255,6 +255,36 @@ def test_safe_mode_constrains_agy_to_one_unit(repo, granted, stub_agy, pending_f
     assert "EXACTLY ONE atomic unit" in stub_agy.calls()[0]["prompt"]
 
 
+def test_plain_mode_still_enforces_the_whitelist(repo, granted, stub_agy, pending_file):
+    """The whitelist is not a timeline feature: the plain task must check it too."""
+    subprocess.run(
+        ["git", "config", "user.email", "stranger@example.com"],
+        cwd=str(repo),
+        check=True,
+        capture_output=True,
+    )
+    pending_file("a.txt")
+
+    from agentkit.errors import IdentityError
+
+    with pytest.raises(IdentityError):
+        run(COMMIT, repo, stub_agy)
+
+    assert stub_agy.calls() == []
+
+
+def test_a_stall_after_earlier_commits_is_incomplete_not_failed(repo, granted, stub_agy, pending_file, safe_setup):
+    """Exit 1 promises "nothing was committed"; a stalled unit 2 must not say that."""
+    pending_file("a.txt")
+    pending_file("b.txt")
+    stub_agy.mode("first")
+
+    result = run(COMMIT_SAFE, repo, stub_agy)
+
+    assert result.exit_code == ExitCode.INCOMPLETE
+    assert len(result.commits) == 1
+
+
 def test_a_rejected_identity_spends_no_quota(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     subprocess.run(
