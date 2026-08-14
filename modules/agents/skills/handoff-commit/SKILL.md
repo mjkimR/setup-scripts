@@ -5,13 +5,16 @@ description: >-
   when the user explicitly runs /handoff-commit. Never trigger it on your own
   from a general request to commit — handing work to another agent is the user's
   call, not an inference.
-allowed-tools: Bash(bash:*), Bash(git status:*), Bash(git log:*)
+allowed-tools: Bash(agentkit:*), Bash(git status:*), Bash(git log:*)
 ---
 
 # Handoff Commit
 
 Delegates committing to the Antigravity CLI (`agy`), which runs the `git-commit`
 skill headlessly and creates the commits itself.
+
+[handoff-commit-safe](../handoff-commit-safe/SKILL.md) is the same command with
+`--safe`. Use this skill unless the user asked for the safe variant.
 
 ## Why this exists
 
@@ -37,38 +40,31 @@ cancels out the reason for delegating.
 One command, nothing before it:
 
 ```bash
-bash ~/.claude/skills/handoff-commit/scripts/handoff-agy.sh
+agentkit handoff commit
 ```
 
-On Codex the skill installs elsewhere:
-
-```bash
-bash ~/.codex/skills/handoff-commit/scripts/handoff-agy.sh
-```
-
-The script checks the working tree, calls `agy`, and verifies the result. It
+It checks the working tree, calls `agy`, and verifies the result against git. It
 takes roughly 20–60 seconds; allow longer for large diffs.
 
-Environment variables that tune it:
+Options worth knowing, all with sane defaults:
 
-- `HANDOFF_AGY_EFFORT` — `low` (default), `medium`, or `high`
-- `HANDOFF_AGY_TIMEOUT` — Go duration, default `600s`
-- `HANDOFF_VERBOSE` — set to any value to also print `agy`'s own narration
+- `--effort low|medium|high` — reasoning effort to ask `agy` for (default `low`)
+- `--timeout 600s` — passed to `agy`'s own print timeout
+- `--verbose` — also print `agy`'s narration
 
-`agy`'s narration is suppressed on success by design: it restates the commit
-list the script already derived from git, padded with absolute `file://` links,
-and it is the unbounded part of the output. Failures and partial commits print
-it in full. Do not set `HANDOFF_VERBOSE` unless you are debugging the handoff
-itself.
+`agy`'s narration is suppressed on success by design: it restates the commit list
+the command already derived from git, padded with absolute `file://` links, and
+it is the unbounded part of the output. Failures and partial commits print it in
+full. Do not pass `--verbose` unless you are debugging the handoff itself.
 
 ### Step 2: Report the result
 
-Relay what the script printed. Do not re-verify with your own `git log`.
+Relay what the command printed. Do not re-verify with your own `git log`.
 
 | Exit code | Meaning | What to report |
 |---|---|---|
-| 0 | Success, or nothing to commit | The commit hashes and subjects the script listed |
-| 1 | No commit was created | The cause line the script printed, plus its suggested fix |
+| 0 | Success, or nothing to commit | The commit hashes and subjects it listed |
+| 1 | No commit was created | The cause line it printed, plus its suggested fix |
 | 2 | Committed, but files remain uncommitted | The commits made *and* the leftover files |
 
 Keep the report short: number of commits, each hash and subject, and any
@@ -78,11 +74,12 @@ remaining uncommitted files.
 
 - **Exit code 0 from `agy` means nothing.** Headless `agy` cannot prompt for tool
   permission, so it auto-denies, returns `"status":"SUCCESS"` with an empty
-  response, and exits 0. The script ignores that and checks whether HEAD moved
+  response, and exits 0. The runner ignores that and checks whether HEAD moved
   instead. Never treat raw `agy` output as proof that a commit happened.
-- **Permissions are required up front.** `agy` needs `command(git add)` and
-  `command(git commit)` in `~/.gemini/antigravity-cli/settings.json`. Grant them
-  with `bash ~/.claude/skills/handoff-commit/scripts/setup-permissions.sh`.
+- **Permissions are required up front.** `agy` needs `command(git add)`,
+  `command(git commit)` and `command(git ls-files)`. Grant them with
+  `agentkit agy grant`; check with `agentkit agy check`. The runner refuses to
+  start without them.
 - **Quota.** Each handoff spends Antigravity quota on a five-hour rolling limit.
   Keep it user-triggered; do not put it in a loop or on a schedule.
 - Verified against `agy` 1.1.12. Re-test after a CLI update.

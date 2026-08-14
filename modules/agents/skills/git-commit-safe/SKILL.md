@@ -7,99 +7,70 @@ description: >-
 
 # Git Commit Safe Skill
 
-This skill enforces strict safety pre-flight checks (email whitelist verification and custom commit timestamp control) before performing atomic, convention-compliant Git commits.
+[git-commit](../git-commit/SKILL.md) plus two guarantees: the commit is refused
+unless the current git identity is whitelisted, and the commit timestamp is
+resolved rather than taken from the clock.
 
-## Core Principles
+**Everything about inspecting changes, splitting them into atomic units and
+wording the message lives in `git-commit`. Follow it.** This file only adds the
+pre-flight and changes how the commit itself is executed.
 
-0. **Handoff Mode (Check This First)**:
-   - If `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` are **already set in your environment**, you were invoked through `/handoff-commit-safe`. The caller has already verified the email whitelist and resolved the timestamp.
-   - In that case: **skip Principles 1–3 and Steps 1 and 4 entirely.** Do not run the pre-flight script, do not resolve or set any dates. Just `git add` and plain `git commit` — the dates are inherited.
-   - Check with `printenv GIT_AUTHOR_DATE`. Everything else in this skill still applies.
+Both additions belong to the `agentkit` CLI, which owns the config, the whitelist
+and the timestamp state. If it is not on `PATH`, stop and point the user at
+[references/onboard.md](./references/onboard.md).
 
-1. **Pre-flight Configuration Verification**:
-   - Check if `~/.config/git-commit-safe/config.yaml` exists.
-   - If missing or invalid, **abort immediately** with a clear error and instruct the user to follow [references/onboard.md](./references/onboard.md).
+## Step 1: Pre-flight
 
-2. **Email Whitelist Enforcement**:
-   - Verify that the current `git config user.email` is explicitly listed in `allowed_emails`.
-   - If not whitelisted, **abort the commit immediately** to prevent committing under an unwanted or incorrect identity.
-
-3. **Commit Timestamp Control (Daily Range & Natural Elapsed Progression)**:
-   - **Today's 1st Commit**: Automatically picks a random base timestamp within the configured range (e.g. `19:00 ~ 21:00`).
-   - **Today's Subsequent Commits**: Naturally accumulates the elapsed real-time since the 1st commit.
-   - **Strict Forward Progress**: Rapid consecutive commits always advance monotonically (+30s~90s min gap).
-   - Injects both `GIT_AUTHOR_DATE` and `GIT_COMMITTER_DATE` consistently when creating commits.
-
-4. **Direct Autonomous Execution & Atomic Commits**:
-   - Inspect recent `git log` to match repository style.
-   - Partition changes into atomic logical units (never blind `git add .`).
-   - Format non-trivial commit bodies with an optional context summary sentence and bullet points (`- `).
-   - Execute commits directly without asking for repetitive confirmation once checks pass.
-
----
-
-## Step-by-Step Workflow
-
-### Step 1: Pre-flight Verification
-
-*Skip this step entirely in handoff mode (Core Principle 0).*
-
-Run the pre-flight verification script to check config, email whitelist, and resolve timestamps. Use the skill's installed location — the path below is absolute because the working directory is the target repository, not this skill:
 ```bash
-bash ~/.gemini/config/skills/git-commit-safe/scripts/verify-safe.sh
+agentkit commit-safe verify
 ```
 
-- **If exit code is 2 (Config Missing)**:
-  Stop and guide the user:
-  > `[ERROR] git-commit-safe configuration not found. Please refer to [references/onboard.md](./references/onboard.md) or run scripts/setup-config.sh.`
-- **If exit code is 1 (Email Violation)**:
-  Stop and alert the user with the non-whitelisted email details.
+- **Exit 2 — config missing or unusable.** Stop. Tell the user to run
+  `agentkit commit-safe init`, or point at [references/onboard.md](./references/onboard.md).
+- **Exit 1 — identity rejected.** Stop and report the offending email verbatim.
+  Never work around it; choosing a different identity is the user's call.
 
-### Step 2: Check Commit History
-Inspect recent commits to learn the repository's convention:
-```bash
-git log -n 5 --oneline
-```
+`verify` only previews the timestamp — it never consumes one, so running it costs
+nothing.
 
-### Step 3: Inspect Working Tree & Partition Atomic Units
-Analyze status and diffs:
-```bash
-git status -s
-git diff --cached
-git diff
-```
+## Step 2: Analyse and stage
 
-Stage only files for the first atomic unit:
+Exactly as in `git-commit`: read `git log` for the repository's conventions,
+inspect `git status -s` and the diffs, then stage one atomic unit.
+
 ```bash
 git add path/to/file1 path/to/file2
 ```
 
-### Step 4: Execute Commit with Safe Timestamp & Identity
+## Step 3: Commit with the resolved timestamp
 
-**In handoff mode** (Core Principle 0), the dates are already in your environment. Commit plainly:
+`agentkit commit-safe env` re-checks the whitelist, advances the timestamp state
+and prints the exports. Load them in the same command as the commit — a separate
+shell would lose them:
 
 ```bash
+eval "$(agentkit commit-safe env)" && \
 git commit -m "<subject matching detected repo style>" \
   -m "[Optional 1-line overview explaining intent]" \
   -m "- <Key change 1>" \
   -m "- <Key change 2>"
 ```
 
-**Otherwise**, load the verified environment variables first:
+Repeat Steps 2–3 for each remaining atomic unit until the working tree is clean
+— **unless the caller asked for exactly one unit**, in which case stop after the
+first commit. Each unit gets its own freshly resolved timestamp, which is the
+point: they advance by the real time that passed between them.
 
-```bash
-eval "$(bash ~/.gemini/config/skills/git-commit-safe/scripts/verify-safe.sh --env)" && \
-git commit -m "<subject matching detected repo style>" \
-  -m "[Optional 1-line overview explaining intent]" \
-  -m "- <Key change 1>" \
-  -m "- <Key change 2>"
-```
+## Step 4: Verify
 
-Repeat Steps 3–4 for any remaining atomic change groups until the working tree is clean — **unless the prompt asked for exactly one atomic unit**, in which case stop after the first commit and leave the rest uncommitted.
-
-### Step 5: Verify
-Confirm the newly created commit and timestamps:
 ```bash
 git log -n 1 --format=fuller
 git status
 ```
+
+## Note for headless runs
+
+Under the Antigravity CLI this skill needs `command(agentkit)` and
+`command(eval)` granted; `/handoff-commit-safe` deliberately grants neither.
+That handoff resolves the timestamp on the calling side and delegates plain
+`/git-commit` instead, so nothing here runs inside `agy` during a handoff.

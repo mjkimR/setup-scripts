@@ -25,7 +25,7 @@ This skill provides operational workflows for inspecting changes, referencing re
    - Proactively analyze, partition changes into atomic groups, stage relevant files, craft the messages, and execute `git commit` directly.
 
 4. **Honor Caller Constraints (Handoff Contract)**:
-   - This skill is also invoked non-interactively through `/handoff-commit`, where the caller may narrow the job. Those constraints override the default behavior.
+   - This skill is also invoked non-interactively through `/handoff-commit` and `/handoff-commit-safe`, where the caller may narrow the job. Those constraints override the default behavior.
    - **If the prompt lists specific files**, stage only those. Never `git add` a file outside the list, even when it looks related.
    - **If the prompt asks for exactly one atomic unit**, create a single commit and stop, leaving every other change uncommitted.
    - **If the prompt says the commit dates are already set**, do not resolve or override them.
@@ -77,7 +77,7 @@ git status -s
 git diff --cached
 git diff
 ```
-*Tip: `bash ~/.gemini/config/skills/git-commit/scripts/git-summary.sh` gives an aggregated overview. Skip it in a headless run — it needs a `command(bash)` grant that the handoff deliberately does not ask for.*
+*Tip: `agentkit git summary` gives an aggregated overview in one call. Skip it in a headless run — it needs a `command(agentkit)` grant that the handoff deliberately does not ask for.*
 
 ### Step 3: Partition Changes into Atomic Units
 Identify distinct logical changes:
