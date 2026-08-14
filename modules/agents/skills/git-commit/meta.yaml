@@ -1,0 +1,7 @@
+name: git-commit
+description: Git commit message generation, inspection, and conventional workflow
+
+targets:
+  - antigravity
+  # - claude
+  # - codex

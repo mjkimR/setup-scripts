@@ -35,6 +35,7 @@ options=(
   "Configure Oh My Zsh & plugins"
   "Sync VS Code/Cursor/VSCodium configs & extensions"
   "Install agent notification hooks (Claude Code & Codex, macOS only)"
+  "Sync AI Agent skills (Antigravity, etc.)"
 )
 
 # Default checkboxes (true for essential tools, false for optional candidates)
@@ -45,6 +46,7 @@ defaults=(
   "false" # Oh My Zsh
   "true"  # IDE Settings
   "false" # Agent notification hooks
+  "true"  # Agent skills
 )
 
 # Target script paths
@@ -54,7 +56,8 @@ scripts=(
   "$SCRIPT_DIR/modules/terminal/uv/install.sh"
   "$SCRIPT_DIR/modules/terminal/zsh/install.sh"
   "$SCRIPT_DIR/modules/ide/vscode/install.sh"
-  "$SCRIPT_DIR/modules/agents/notify/install.sh"
+  "$SCRIPT_DIR/modules/agents/hooks/install.sh"
+  "$SCRIPT_DIR/modules/agents/skills/install.sh"
 )
 
 # Call Multi-select TUI menu
