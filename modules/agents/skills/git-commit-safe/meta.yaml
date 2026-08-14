@@ -1,0 +1,7 @@
+name: git-commit-safe
+description: Safe git commit workflow with email whitelist enforcement and custom timestamp control
+
+targets:
+  - antigravity
+  # - claude
+  # - codex
