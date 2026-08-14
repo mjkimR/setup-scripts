@@ -30,8 +30,6 @@ def run(args: Sequence[str], *, cwd: Path | None = None) -> str:
         detail = result.stderr.strip() or str(result.returncode)
         command = f"git {' '.join(args)}"
         if _LOCK_MARKER.search(detail):
-            # Somebody else is mid-write. Nothing here is broken and nothing to
-            # repair — the lock clears on its own once they finish.
             raise GitLockError(
                 f"{command} could not take the index lock.",
                 retry_after="the other git process releases the lock (usually seconds)",
@@ -61,12 +59,7 @@ def repo_root(cwd: Path | None = None) -> Path:
 
 
 def head_sha(cwd: Path | None = None) -> str:
-    """The current commit, or "" in a repository that has none yet.
-
-    --verify --quiet matters: a bare `git rev-parse HEAD` on an unborn branch
-    echoes the literal string "HEAD" to stdout before failing, and that string
-    then compares as though it were a commit.
-    """
+    """The current commit SHA, or empty string if repository has no commits yet."""
     result = subprocess.run(
         ["git", "rev-parse", "--verify", "--quiet", "HEAD"],
         cwd=str(cwd) if cwd else None,

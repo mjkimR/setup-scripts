@@ -1,36 +1,4 @@
-"""Exit codes, action modes, and the errors that carry them.
-
-Two contracts live here, one coarse and one fine.
-
-The exit codes are the coarse one, and the only one a shell or a plain
-subprocess call can see. The numbers are chosen for the caller's benefit rather
-than for internal tidiness:
-
-    0   what was asked for happened
-    1   nothing happened — the work was refused, or it produced no effect
-    2   something happened but the job is unfinished — partial work was left
-        behind, a guard tripped, or the state it needs is unusable
-    64  the command line itself was wrong (sysexits.h EX_USAGE)
-
-The fine contract is for the AI agents that drive this tool through skills. An
-exit code says how it went; it does not say what to do about it, and an agent
-that has to infer that will guess wrong in the expensive direction — retrying
-something that already half-succeeded. So a failure also carries a `mode`, the
-directive for the caller, alongside a machine-readable `code` and the material
-for a useful report: `fix`, `what_to_report`, `target_files`, `details`.
-
-`Advisory` is that bundle as a value type, and `Advisory.lines` is the single
-renderer for it. Not every case that needs a directive is an exception — work
-that finishes partway returns an exit code rather than raising — so the value
-type exists separately from the exception hierarchy, and both render alike.
-
-The rule that keeps this honest: **a rendered block has to be enough on its
-own.** A caller acting on one should never need a table in a SKILL.md to
-interpret it, because that table would have to be copied into every skill and
-would drift out of step with this file the first time a mode is added. If a
-directive is only comprehensible with documentation open, the text is wrong —
-fix the text, not the documentation.
-"""
+"""Exit codes, action modes, and advisory structures for agentkit."""
 
 from __future__ import annotations
 
@@ -63,13 +31,7 @@ class Retry(str, Enum):
 
 
 class ActionMode(str, Enum):
-    """The directive handed to a calling agent.
-
-    Derived, never assigned: `Advisory.mode` projects (actor, retry, guardrail)
-    onto one of these. Raise sites declare the two axes, which is what stops
-    them from picking a directive that contradicts their own situation, and
-    callers still read a single flat word.
-    """
+    """Directive for the calling agent, derived by Advisory.mode."""
 
     AUTO = "AUTO"  # Run the fix command, retry once
     INTERACTION = "INTERACTION"  # Ask the user for confirmation/input before proceeding
@@ -102,12 +64,7 @@ class ErrorCode(str, Enum):
     TOOL_INTERNAL_ERROR = "TOOL_INTERNAL_ERROR"
 
 
-# Each entry has to stand on its own. A caller should be able to act correctly
-# on one of these blocks with no skill documentation open and no memory of this
-# module, so the text states the whole directive rather than naming a mode to
-# look up. It also cannot assume what the caller is allowed to do — a skill with
-# no editing tools reads the same line as a dev session — so these describe the
-# finding and the boundary, and never prescribe an edit.
+# Self-contained action messages displayed to calling agents for each mode.
 _ACTION_TEXT: dict[ActionMode, str] = {
     ActionMode.AUTO: (
         "AUTO — Run the [FIX] command once, then retry the operation once.\n"
@@ -144,18 +101,7 @@ _CONTINUATION = " " * len("[ACTION] ")
 
 @dataclass(frozen=True)
 class Advisory:
-    """What the calling agent should do next.
-
-    Errors carry one, but so do the paths that never raise: a partial commit
-    returns an exit code rather than an exception and still needs a directive.
-    Keeping this a value type is what lets both render through one formatter,
-    so the agent sees the same `[ACTION]` block wherever the news came from.
-
-    `actor` and `retry` are the two things a raise site actually knows, and they
-    vary independently — "nobody can act" says nothing about whether a retry is
-    safe. Assigning a single directive by hand meant answering both at once and
-    getting one of them wrong; `mode` derives it instead.
-    """
+    """Structured directive and metadata for the calling agent."""
 
     code: ErrorCode
     actor: Actor
@@ -183,11 +129,7 @@ class Advisory:
         return ActionMode.DEFER if self.retry is Retry.SAFE else ActionMode.HALT
 
     def lines(self, message: str | None = None) -> list[str]:
-        """The rendered block, one string per line, without a trailing newline.
-
-        Callers own the stream and any tag prefix; `message` adds the leading
-        `[ERROR]` line for the sites that have one.
-        """
+        """Render the advisory block as a list of lines."""
         rendered: list[str] = []
         if message is not None:
             rendered.append(f"[ERROR]  ({self.code.value}) {message}")
@@ -293,13 +235,7 @@ class IdentityError(AgentkitError):
 
 
 class WhitelistError(IdentityError):
-    """The identity is well-formed but the whitelist refuses it.
-
-    A guardrail, not a misconfiguration. The whole point of the whitelist is
-    that the agent cannot decide to be on it, so this must never arrive with a
-    `fix` that edits the whitelist — that would hand the agent the bypass the
-    check exists to prevent.
-    """
+    """The git identity is rejected by the whitelist guardrail."""
 
     guardrail = True
     retry = Retry.UNSAFE
@@ -315,12 +251,7 @@ class PreflightError(AgentkitError):
 
 
 class NotAGitRepoError(PreflightError):
-    """The working directory is not inside a git repository.
-
-    No `fix`: creating a repository is a decision, not a repair, and running
-    `git init` to get past an error is exactly the kind of improvisation the
-    caller is told not to do.
-    """
+    """The working directory is not inside a git repository."""
 
     code = ErrorCode.NOT_A_GIT_REPO
     actor = Actor.USER

@@ -37,12 +37,7 @@ DEFAULT_MAX_UNITS = 10
 
 
 def _advise(out: Reporter, advisory: Advisory, message: str | None = None) -> None:
-    """Print an advisory for a path that reports rather than raises.
-
-    Same block the CLI prints for an exception, so the calling agent does not
-    have to learn two formats depending on whether the tool died or merely
-    stopped short.
-    """
+    """Print an advisory block for operations that report instead of raising."""
     for line in advisory.lines(message):
         out.warn(line)
 
@@ -104,8 +99,7 @@ def run_handoff(
             result.exit_code = ExitCode.INCOMPLETE
             return result
 
-        # Resolving the environment can fail — a rejected identity, a missing
-        # config — and doing it here means that failure costs no quota.
+        # Resolve environment variables before executing handoff.
         env, label = ({}, "")
         if task.env_factory is not None:
             env, label = task.env_factory()
@@ -197,9 +191,7 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
                 ],
             )
 
-    # Refuse to start without the grants rather than discovering it after a
-    # wasted agy round trip. Headless agy soft-denies and reports success, so a
-    # missing grant otherwise looks like "the model decided not to commit".
+    # Check required permission grants before invoking agy.
     missing = missing_rules(task.grants)
     if missing:
         raise AgyPermissionError(
@@ -234,11 +226,7 @@ def _report_nothing_happened(
     else:
         left = "The working tree was left untouched."
 
-    # HEAD did not move, so this round committed nothing and the cause below
-    # decides what happens next. Once an earlier unit has committed, though,
-    # that half-done work outranks the cause: acting on any of these means
-    # re-running the handoff, and that call belongs to the user. Both axes
-    # collapse to UNSAFE, and every branch derives HALT.
+    # Determine retry safety based on whether prior units already committed.
     after_fix = Retry.UNSAFE if result.commits else Retry.AFTER_FIX
     wait_it_out = Retry.UNSAFE if result.commits else Retry.SAFE
 

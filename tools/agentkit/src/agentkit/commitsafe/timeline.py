@@ -1,11 +1,4 @@
-"""Commit timestamp resolution.
-
-The first commit of a day lands on a random point inside the configured window.
-Every later commit that day advances by the real time that has actually elapsed
-since then, so a session's commits keep their real spacing while sitting inside
-the window. Commits made back to back would collapse onto the same second, so a
-minimum gap is enforced to keep the sequence strictly increasing.
-"""
+"""Commit timestamp resolution within configured daily time windows."""
 
 from __future__ import annotations
 

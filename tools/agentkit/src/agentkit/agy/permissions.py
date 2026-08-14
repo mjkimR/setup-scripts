@@ -1,15 +1,4 @@
-"""Reading and extending `agy`'s command allow-list.
-
-Headless `agy` cannot prompt, so anything outside `permissions.allow` is
-auto-denied and the run silently does nothing. Granting named rules is preferred
-over `--dangerously-skip-permissions`, which auto-approves every tool call
-including arbitrary shell commands.
-
-Rules are command *prefixes*, checked per `&&` segment: `command(git log)`
-matches `git log -n 5 --oneline`, and one denied segment kills the whole chain.
-An environment-variable prefix (`GIT_AUTHOR_DATE="…" git commit …`) does not
-match `command(git commit)` at all.
-"""
+"""Read and extend the Antigravity CLI (`agy`) command permissions allowlist."""
 
 from __future__ import annotations
 
@@ -32,12 +21,7 @@ def settings_files() -> Sequence[Path]:
 
 
 def granted_rules(paths: Sequence[Path] | None = None) -> set[str]:
-    """Every allow rule found across agy's settings files.
-
-    The two files do not share a schema, and the schema has changed between
-    releases, so this collects any list of strings under an "allow" key at any
-    depth rather than pinning one path into the document.
-    """
+    """Find all allow rules across agy settings files."""
     found: set[str] = set()
     for path in paths if paths is not None else settings_files():
         if not path.is_file():
@@ -59,11 +43,7 @@ def missing_rules(
 
 
 def grant(rules: Iterable[str], *, settings_path: Path | None = None) -> list[str]:
-    """Add rules to permissions.allow, backing the file up first.
-
-    Returns the rules that were actually added; already-present ones are left
-    alone rather than duplicated.
-    """
+    """Add rules to permissions.allow, backing up the file first."""
     settings_path = settings_path if settings_path is not None else SETTINGS_PATH
     if not settings_path.is_file():
         raise PreflightError(

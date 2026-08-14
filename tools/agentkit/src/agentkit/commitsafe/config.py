@@ -1,10 +1,4 @@
-"""The commit-safe config file.
-
-Parsed with a narrow regex reader rather than a YAML library. The schema is four
-keys deep and the file is hand-written, so a parser dependency would buy very
-little; keeping it out means the config can be read even from a broken
-environment.
-"""
+"""Global commit-safe configuration loader and writer."""
 
 from __future__ import annotations
 

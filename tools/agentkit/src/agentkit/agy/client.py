@@ -37,12 +37,7 @@ class AgyRun:
     log: str
 
     def denied_commands(self) -> list[str]:
-        """The commands `agy` refused, which only the log file names.
-
-        stdout says merely that "a tool required the command permission". The
-        log names it, which is what separates "nothing was ever granted" from
-        "one rule is missing".
-        """
+        """Extract refused commands from the agy log output."""
         return sorted(set(_DENIED_COMMAND.findall(self.log)))
 
     @property
@@ -79,10 +74,7 @@ class AgyClient:
         add_dir: Path,
         env: dict[str, str] | None = None,
     ) -> AgyRun:
-        # --add-dir is not optional. Without it agy resolves its own workspace
-        # from its stored project list and runs commands in whatever repository
-        # it used last, which with git add/commit granted means commits landing
-        # in the wrong repo.
+        # Ensure agy runs strictly within the target directory.
         with tempfile.TemporaryDirectory(prefix="agentkit-agy-") as scratch:
             log_path = Path(scratch) / "agy.log"
             process = subprocess.run(

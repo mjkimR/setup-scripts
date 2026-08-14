@@ -1,9 +1,4 @@
-"""Identity whitelisting and commit timestamp control.
-
-Used two ways: directly, by an agent running the `git-commit-safe` skill, and
-indirectly, by the safe handoff, which resolves a timestamp per atomic unit and
-hands it to `agy` through the environment.
-"""
+"""Identity whitelisting and commit timestamp control."""
 
 from .config import Config, config_path, load_config, write_default_config
 from .identity import checked_identity, git_email

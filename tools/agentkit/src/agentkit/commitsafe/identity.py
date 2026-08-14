@@ -1,9 +1,4 @@
-"""The whitelist check.
-
-Kept separate from the config that holds the list, because this is the part with
-teeth: it is what refuses to commit, and both the skill and the safe handoff
-route through it.
-"""
+"""Git identity verification against configured commit whitelists."""
 
 from __future__ import annotations
 

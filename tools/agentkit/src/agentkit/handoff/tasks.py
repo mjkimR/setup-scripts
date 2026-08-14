@@ -13,9 +13,7 @@ from pathlib import Path
 from ..commitsafe import checked_identity, resolve
 from ..repoconfig import load_repo_config
 
-# git ls-files is how the agent enumerates untracked files; without it a
-# repository with any untracked path stalls the run. Read-only, like the
-# log/diff/status rules that are usually already present.
+# Permission grants required by git commit handoff tasks.
 COMMIT_GRANTS: tuple[str, ...] = (
     "command(git add)",
     "command(git commit)",
@@ -45,9 +43,7 @@ class HandoffTask:
     per_unit: bool = False
     log_format: str = "%h  %s"
     date_format: str | None = None
-    # Called once per invocation, before agy starts. Returns the environment to
-    # hand over plus a short label for the progress line. Raising here aborts
-    # before any quota is spent, which is the point for the safe variant.
+    # Factory producing environment variables and display label for each run.
     env_factory: Callable[[], tuple[dict[str, str], str]] | None = field(default=None, repr=False)
 
     def prompt(self, repo_root: Path) -> str:
@@ -90,9 +86,7 @@ COMMIT = HandoffTask(
     ),
 )
 
-# Delegates /git-commit, not /git-commit-safe: with the dates already resolved
-# and exported by the runner, the safe skill's own workflow reduces to exactly
-# what /git-commit does.
+# Safe commit task with per-unit execution and timestamp injection.
 COMMIT_SAFE = HandoffTask(
     name="commit-safe",
     tag="handoff-safe",

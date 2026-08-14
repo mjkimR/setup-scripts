@@ -30,17 +30,11 @@ class ErrorHandlingGroup(click.Group):
         try:
             return super().invoke(ctx)
         except click.UsageError as error:
-            # Click renders and exits these itself; only the number is ours.
-            # Click's own default is 2, which already means INCOMPLETE here, so
-            # a bad flag would be indistinguishable from a partial commit.
+            # Map usage errors to EX_USAGE (64).
             error.exit_code = int(ExitCode.USAGE)
             raise
         except (click.exceptions.Exit, click.Abort, click.ClickException, SystemExit):
-            # Click's own control flow, not failures: `--help`, `--version`,
-            # Ctrl-C, and every ctx.exit() a subcommand makes to set its exit
-            # code. click.exceptions.Exit is a RuntimeError, so without this it
-            # falls through to the catch-all below and a clean exit is reported
-            # as a tool crash.
+            # Allow clean Click control-flow exits.
             raise
         except AgentkitError as error:
             _echo(error.advisory.lines(str(error)))
