@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 from datetime import datetime
+from itertools import pairwise
 
 from agentkit.commitsafe import load_config, resolve, state_path
 
@@ -46,7 +47,7 @@ def test_back_to_back_commits_keep_the_minimum_gap(safe_setup):
     stamps = [resolve(config) for _ in range(4)]
 
     seconds = [stamp.when.timestamp() for stamp in stamps]
-    gaps = [later - earlier for earlier, later in zip(seconds, seconds[1:])]
+    gaps = [later - earlier for earlier, later in pairwise(seconds)]
     # Without the floor these calls land in the same second: the elapsed real
     # time between them is milliseconds.
     assert all(gap >= config.min_gap_seconds for gap in gaps), gaps

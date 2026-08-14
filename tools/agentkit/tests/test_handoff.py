@@ -13,8 +13,9 @@ from pathlib import Path
 import pytest
 
 from agentkit import gitutil
-from agentkit.errors import ExitCode, PreflightError
+from agentkit.errors import ConfigError, ExitCode, PreflightError
 from agentkit.handoff import get_task, run_handoff
+from agentkit.repoconfig import RepoConfig, WhitelistConfig, save_repo_config
 
 pytestmark = pytest.mark.integration
 
@@ -22,8 +23,32 @@ COMMIT = get_task("commit")
 COMMIT_SAFE = get_task("commit-safe")
 
 
+@pytest.fixture(autouse=True)
+def onboarded_repo(repo: Path) -> None:
+    save_repo_config(
+        RepoConfig(
+            path=repo / ".git" / "agentkit-commit.json",
+            whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        ),
+        cwd=repo,
+    )
+
+
 def run(task, repo: Path, stub_agy, **kwargs):
     return run_handoff(task, client=stub_agy.client, repo=repo, **kwargs)
+
+
+def test_unonboarded_repo_raises_preflight_error(repo: Path, granted, stub_agy, pending_file):
+    config_file = repo / ".git" / "agentkit-commit.json"
+    if config_file.is_file():
+        config_file.unlink()
+
+    pending_file("a.txt")
+    with pytest.raises(ConfigError) as exc_info:
+        run(COMMIT, repo, stub_agy)
+
+    assert exc_info.value.exit_code == ExitCode.INCOMPLETE
+    assert "not onboarded" in str(exc_info.value)
 
 
 def test_a_clean_tree_costs_nothing(repo, granted, stub_agy):
@@ -33,9 +58,7 @@ def test_a_clean_tree_costs_nothing(repo, granted, stub_agy):
     assert stub_agy.calls() == []
 
 
-def test_the_first_commit_in_an_empty_repository_is_counted(
-    repo, granted, stub_agy, pending_file
-):
+def test_the_first_commit_in_an_empty_repository_is_counted(repo, granted, stub_agy, pending_file):
     pending_file("a.txt")
 
     result = run(COMMIT, repo, stub_agy)
@@ -47,9 +70,7 @@ def test_the_first_commit_in_an_empty_repository_is_counted(
     assert not result.remaining
 
 
-def test_the_prompt_pins_the_repository_and_the_skill(
-    repo, granted, stub_agy, pending_file
-):
+def test_the_prompt_pins_the_repository_and_the_skill(repo, granted, stub_agy, pending_file):
     pending_file("a.txt")
 
     run(COMMIT, repo, stub_agy)
@@ -62,9 +83,7 @@ def test_the_prompt_pins_the_repository_and_the_skill(
     assert call["add_dir"] == str(repo)
 
 
-def test_leftover_files_make_the_handoff_incomplete(
-    repo, granted, stub_agy, pending_file
-):
+def test_leftover_files_make_the_handoff_incomplete(repo, granted, stub_agy, pending_file):
     pending_file("a.txt")
     pending_file("b.txt")
     stub_agy.mode("one")
@@ -76,9 +95,7 @@ def test_leftover_files_make_the_handoff_incomplete(
     assert len(result.remaining) == 1
 
 
-def test_a_denied_run_is_not_mistaken_for_success(
-    repo, granted, stub_agy, pending_file, capsys
-):
+def test_a_denied_run_is_not_mistaken_for_success(repo, granted, stub_agy, pending_file, capsys):
     pending_file("a.txt")
     stub_agy.mode("none")
 
@@ -92,9 +109,7 @@ def test_a_denied_run_is_not_mistaken_for_success(
     assert "git ls-files --others" in reported.err
 
 
-def test_an_authentication_failure_is_named(
-    repo, granted, stub_agy, pending_file, capsys
-):
+def test_an_authentication_failure_is_named(repo, granted, stub_agy, pending_file, capsys):
     pending_file("a.txt")
     stub_agy.mode("auth")
 
@@ -132,9 +147,7 @@ def test_an_unavailable_agy_is_reported(repo, granted, stub_agy, pending_file):
 # --- safe variant ----------------------------------------------------------
 
 
-def test_safe_mode_calls_agy_once_per_unit(
-    repo, granted, stub_agy, pending_file, safe_setup
-):
+def test_safe_mode_calls_agy_once_per_unit(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     pending_file("b.txt")
     pending_file("c.txt")
@@ -148,9 +161,7 @@ def test_safe_mode_calls_agy_once_per_unit(
     assert not result.remaining
 
 
-def test_safe_mode_resolves_a_fresh_timestamp_per_unit(
-    repo, granted, stub_agy, pending_file, safe_setup
-):
+def test_safe_mode_resolves_a_fresh_timestamp_per_unit(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     pending_file("b.txt")
     stub_agy.mode("one")
@@ -165,9 +176,7 @@ def test_safe_mode_resolves_a_fresh_timestamp_per_unit(
     assert [call["committer_date"] for call in stub_agy.calls()] == dates
 
 
-def test_safe_mode_stamps_the_commits_it_creates(
-    repo, granted, stub_agy, pending_file, safe_setup
-):
+def test_safe_mode_stamps_the_commits_it_creates(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     stub_agy.mode("one")
 
@@ -178,9 +187,7 @@ def test_safe_mode_stamps_the_commits_it_creates(
     assert logged == [stamped]
 
 
-def test_safe_mode_constrains_agy_to_one_unit(
-    repo, granted, stub_agy, pending_file, safe_setup
-):
+def test_safe_mode_constrains_agy_to_one_unit(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     stub_agy.mode("one")
 
@@ -189,9 +196,7 @@ def test_safe_mode_constrains_agy_to_one_unit(
     assert "EXACTLY ONE atomic unit" in stub_agy.calls()[0]["prompt"]
 
 
-def test_a_rejected_identity_spends_no_quota(
-    repo, granted, stub_agy, pending_file, safe_setup
-):
+def test_a_rejected_identity_spends_no_quota(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     subprocess.run(
         ["git", "config", "user.email", "stranger@example.com"],
@@ -208,9 +213,7 @@ def test_a_rejected_identity_spends_no_quota(
     assert stub_agy.calls() == []
 
 
-def test_the_loop_guard_stops_a_runaway_split(
-    repo, granted, stub_agy, pending_file, safe_setup
-):
+def test_the_loop_guard_stops_a_runaway_split(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     pending_file("b.txt")
     pending_file("c.txt")

@@ -141,4 +141,3 @@ def test_repo_config_disabled_whitelist_permits_foreign_email(safe_setup, repo: 
     config, email = checked_identity(cwd=repo)
     assert email == "stranger@example.com"
     assert config.allows(email)
-

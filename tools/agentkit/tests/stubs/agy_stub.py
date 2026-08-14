@@ -34,9 +34,7 @@ def parse_args(argv):
 
 
 def git(*args):
-    return subprocess.run(
-        ["git", *args], capture_output=True, text=True, check=True
-    ).stdout
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
 
 def main() -> int:

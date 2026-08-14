@@ -54,9 +54,7 @@ one unit at a time. The runner itself knows nothing about commits.
 
 ## Tests
 
-Live in the repository's root `tests/` tree, not here:
-
 ```bash
-tests/run-all.sh                       # everything
-cd tools/agentkit && uv run pytest ../../tests/tools/agentkit
+cd tools/agentkit && uv run pytest     # package tests
+tests/run-all.sh                       # repository-wide suites
 ```

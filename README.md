@@ -109,7 +109,7 @@ tests/run-all.sh agentkit   # only suites whose name matches
 ```
 
 Shell suites live beside what they cover under `tests/agents/`; the `agentkit`
-package is covered by pytest in `tests/tools/agentkit/`, driven through
+package is covered by pytest in `tools/agentkit/tests/`, driven through
 `uv run` so it tests the source in this repository rather than whatever is
 installed. The handoff runs end to end against a stub `agy` that can be told to
 cooperate, commit partially, or deny every command while reporting success.

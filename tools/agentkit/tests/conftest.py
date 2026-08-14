@@ -80,11 +80,7 @@ def stub_agy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
 
         @staticmethod
         def calls() -> list:
-            return [
-                json.loads(line)
-                for line in calls.read_text(encoding="utf-8").splitlines()
-                if line.strip()
-            ]
+            return [json.loads(line) for line in calls.read_text(encoding="utf-8").splitlines() if line.strip()]
 
     STUB.chmod(0o755)
     monkeypatch.setenv("AGY_STUB_MODE", "all")

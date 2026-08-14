@@ -4,7 +4,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from click.testing import CliRunner
+
 from agentkit import gitutil
+from agentkit.cli import cli
 from agentkit.repoconfig import (
     ConventionConfig,
     RepoConfig,
@@ -15,8 +18,6 @@ from agentkit.repoconfig import (
     repo_config_path,
     save_repo_config,
 )
-from click.testing import CliRunner
-from agentkit.cli import cli
 
 
 def test_repo_config_roundtrip(repo: Path) -> None:
@@ -65,11 +66,14 @@ def test_analyze_repo_history_korean_conventional(repo: Path) -> None:
     gitutil.run(["config", "user.email", "tester@domain.com"], cwd=repo)
 
     # Create several commits with Korean conventional commit messages
-    for i, msg in enumerate([
-        "feat(auth): 로그인 API 추가",
-        "fix(core): 세션 만료 버그 수정",
-        "docs(readme): 설치 가이드 업데이트",
-    ], start=1):
+    for i, msg in enumerate(
+        [
+            "feat(auth): 로그인 API 추가",
+            "fix(core): 세션 만료 버그 수정",
+            "docs(readme): 설치 가이드 업데이트",
+        ],
+        start=1,
+    ):
         f = repo / f"file{i}.txt"
         f.write_text(f"content {i}\n", encoding="utf-8")
         gitutil.run(["add", str(f)], cwd=repo)
@@ -87,11 +91,14 @@ def test_analyze_repo_history_bracketed_english(repo: Path) -> None:
     gitutil.run(["config", "user.name", "Alice"], cwd=repo)
     gitutil.run(["config", "user.email", "alice@example.com"], cwd=repo)
 
-    for i, msg in enumerate([
-        "[auth] Add token verification",
-        "[core] Fix memory leak in cache",
-        "[docs] Update architecture document",
-    ], start=1):
+    for i, msg in enumerate(
+        [
+            "[auth] Add token verification",
+            "[core] Fix memory leak in cache",
+            "[docs] Update architecture document",
+        ],
+        start=1,
+    ):
         f = repo / f"test{i}.txt"
         f.write_text(f"data {i}\n", encoding="utf-8")
         gitutil.run(["add", str(f)], cwd=repo)
@@ -132,3 +139,22 @@ def test_commit_cli_onboard_and_config(repo: Path, monkeypatch) -> None:
     loaded = load_repo_config(cwd=repo)
     assert loaded is not None
     assert loaded.conventions.language == "en"
+
+
+def test_repo_config_migration_and_backfill(repo: Path) -> None:
+    path = repo_config_path(cwd=repo)
+    # Write a sparse/legacy config without version or timeline
+    legacy_json = '{"whitelist": {"enabled": true, "allowed_emails": ["legacy@dev.com"]}}\n'
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(legacy_json, encoding="utf-8")
+
+    loaded = load_repo_config(cwd=repo, auto_migrate=True)
+    assert loaded is not None
+    # Version should be backfilled
+    assert loaded.version == 1
+    # Whitelist is preserved
+    assert loaded.whitelist.allowed_emails == ["legacy@dev.com"]
+    # Missing timeline and conventions are filled with defaults
+    assert loaded.timeline.enabled is True
+    assert loaded.timeline.start == "19:00"
+    assert loaded.conventions.language == "ko"

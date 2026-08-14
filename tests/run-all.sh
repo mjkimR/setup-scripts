@@ -39,7 +39,7 @@ done < <(find "$TESTS_DIR" -name 'test-*.sh' -type f | sort)
 
 for package_dir in "$PROJECT_ROOT"/tools/*/; do
   package="$(basename "$package_dir")"
-  suite="$TESTS_DIR/tools/$package"
+  suite="$package_dir/tests"
   [ -d "$suite" ] || continue
   matches "tools/$package" || continue
 
@@ -51,7 +51,7 @@ for package_dir in "$PROJECT_ROOT"/tools/*/; do
 
   # `uv run` from inside the package resolves its own environment, so the tests
   # import the package under test rather than whatever is installed globally.
-  if (cd "$package_dir" && uv run --quiet pytest "$suite"); then
+  if (cd "$package_dir" && uv run --quiet pytest); then
     :
   else
     failed+=("tools/$package")
