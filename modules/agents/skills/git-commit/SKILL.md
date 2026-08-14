@@ -24,7 +24,14 @@ This skill provides operational workflows for inspecting changes, referencing re
    - Do NOT ask the user for confirmation before committing.
    - Proactively analyze, partition changes into atomic groups, stage relevant files, craft the messages, and execute `git commit` directly.
 
-4. **Format Precedence & Conventions**:
+4. **Honor Caller Constraints (Handoff Contract)**:
+   - This skill is also invoked non-interactively through `/handoff-commit`, where the caller may narrow the job. Those constraints override the default behavior.
+   - **If the prompt lists specific files**, stage only those. Never `git add` a file outside the list, even when it looks related.
+   - **If the prompt asks for exactly one atomic unit**, create a single commit and stop, leaving every other change uncommitted.
+   - **If the prompt says the commit dates are already set**, do not resolve or override them.
+   - There is nobody to ask in a headless run, so settle any remaining choice yourself rather than stopping to ask.
+
+5. **Format Precedence & Conventions**:
    - **Repository Style First (Highest Priority)**:
      Always adhere to the pattern observed in `git log`. Different projects use different styles, for example:
      - Conventional: `type(scope): subject` or `type: subject`
@@ -70,7 +77,7 @@ git status -s
 git diff --cached
 git diff
 ```
-*Tip: You can run [scripts/git-summary.sh](./scripts/git-summary.sh) for an aggregated overview.*
+*Tip: `bash ~/.gemini/config/skills/git-commit/scripts/git-summary.sh` gives an aggregated overview. Skip it in a headless run — it needs a `command(bash)` grant that the handoff deliberately does not ask for.*
 
 ### Step 3: Partition Changes into Atomic Units
 Identify distinct logical changes:
