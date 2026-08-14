@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
@@ -36,10 +37,19 @@ class Stamp:
         return {"GIT_AUTHOR_DATE": stamp, "GIT_COMMITTER_DATE": stamp}
 
 
-def state_path() -> Path:
+def state_path(config: Config | None = None) -> Path:
+    """State file for one config — repos must not share a virtual timeline.
+
+    Keyed by the config's path: a repo config gets its own file, while every
+    caller of the one global config still shares a single timeline.
+    """
     home = os.environ.get(STATE_ENV)
     base = Path(home).expanduser() if home else DEFAULT_STATE_HOME
-    return base / "git-commit-safe" / "state.json"
+    directory = base / "git-commit-safe"
+    if config is None:
+        return directory / "state.json"
+    digest = hashlib.sha256(str(config.path).encode("utf-8")).hexdigest()[:12]
+    return directory / f"state-{digest}.json"
 
 
 def resolve(
@@ -74,7 +84,7 @@ def resolve(
     today = now.strftime("%Y-%m-%d")
     now_epoch = time.time()
 
-    state = _load_state()
+    state = _load_state(config)
     resumable = (
         state.get("date") == today
         and {
@@ -106,7 +116,7 @@ def resolve(
         }
 
     if persist:
-        _save_state(state)
+        _save_state(state, config)
 
     return Stamp(when=datetime.fromtimestamp(target, tz), first_of_day=not resumable)
 
@@ -141,8 +151,8 @@ def _timezone(name: str) -> tzinfo:
         return local
 
 
-def _load_state() -> dict:
-    path = state_path()
+def _load_state(config: Config) -> dict:
+    path = state_path(config)
     if not path.is_file():
         return {}
     try:
@@ -152,7 +162,7 @@ def _load_state() -> dict:
         return {}
 
 
-def _save_state(state: dict) -> None:
-    path = state_path()
+def _save_state(state: dict, config: Config) -> None:
+    path = state_path(config)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
