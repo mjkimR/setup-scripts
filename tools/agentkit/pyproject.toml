@@ -21,3 +21,28 @@ packages = ["src/agentkit"]
 
 # Tests live in the repository's root tests/ tree; their pytest config lives
 # with them, at tests/tools/agentkit/pytest.ini.
+
+[tool.ruff]
+exclude = [".git", ".venv", "migrations"]
+line-length = 120
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "RUF"]
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+"**/tests/**/*.py" = ["F403", "E402"]
+"__init__.py" = ["F403"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+
+[tool.pyright]
+venvPath = "."
+venv = ".venv"
+pythonVersion = "3.10"
+typeCheckingMode = "basic"
+extraPaths = ["src"]
+
