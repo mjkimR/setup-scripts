@@ -1,10 +1,8 @@
 ---
 name: handoff-commit
 description: >-
-  Delegates the whole commit workflow to the Antigravity CLI (agy). Invoke ONLY
-  when the user explicitly runs /handoff-commit. Never trigger it on your own
-  from a general request to commit — handing work to another agent is the user's
-  call, not an inference.
+  Delegates the commit workflow to the Antigravity CLI (agy). Use when requested
+  via /handoff-commit or when committing changes with user confirmation.
 allowed-tools: Bash(agentkit:*), Bash(git status:*), Bash(git log:*)
 ---
 
