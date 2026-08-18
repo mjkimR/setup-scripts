@@ -12,9 +12,14 @@ from agentkit.agy.client import AgyClient
 from agentkit.cli import cli
 from agentkit.codex.client import CodexClient, duration_seconds
 from agentkit.errors import ConfigError, ExitCode
-from agentkit.handoff.work import pickup_prompt, result_path, run_work
+from agentkit.handoff.work import pickup_prompt, progress_path, result_path, run_work
 
 CODEX_STUB = Path(__file__).parent / "stubs" / "codex_stub.py"
+
+
+def _flat(text: str) -> str:
+    """Prompt text is hard-wrapped; assert on meaning, not on where lines break."""
+    return " ".join(text.split())
 
 
 @pytest.fixture
@@ -145,6 +150,49 @@ def test_cli_prompt_prints_the_pickup_prompt(doc: Path) -> None:
 def test_receivers_get_the_completion_report_instruction(doc: Path, stub_agy) -> None:
     run_work(doc, to="agy", client=stub_agy.client)
     assert str(result_path(doc)) in stub_agy.calls()[0]["prompt"]
+
+
+def test_progress_file_is_a_sibling_the_prompt_names(doc: Path) -> None:
+    prompt = pickup_prompt(doc)
+
+    assert progress_path(doc).name == "2026-08-18-demo-handoff-progress.md"
+    assert progress_path(doc).parent == doc.parent
+    assert str(progress_path(doc)) in prompt
+    # Ticking boxes must not read as the one reply that ends the session.
+    assert "Updating it is not a reply" in _flat(prompt)
+
+
+def test_prompt_treats_ticked_steps_as_done(doc: Path) -> None:
+    """A run that dies part-way is resumed, not restarted: the prompt has to say
+    that ticked steps came from an earlier run and must not be redone."""
+    prompt = _flat(pickup_prompt(doc))
+
+    assert "take it as done, do not redo it" in prompt
+    assert "begin at the first unticked step" in prompt
+
+
+def test_partial_run_advises_reading_the_progress_file(doc: Path, stub_codex, capsys) -> None:
+    stub_codex.mode("noreport")
+    run_work(doc, to="codex", client=CodexClient(executable=stub_codex.executable))
+
+    warnings = capsys.readouterr().err
+    assert str(progress_path(doc)) in warnings
+    # Retry.UNSAFE renders as HALT; the hint must inform, not invite a retry.
+    assert "the user's call, not an automatic retry" in _flat(warnings)
+    assert "HALT — Stop here. Do not retry" in warnings
+
+
+def test_progress_file_never_stands_in_for_the_completion_report(doc: Path, stub_codex) -> None:
+    """The whole reason progress lives in its own file: `_finish` keys off the
+    report's existence, so a run that ticked boxes and then died is still
+    incomplete."""
+    stub_codex.mode("noreport")
+    progress_path(doc).write_text("- [x] 1 did a thing\n- [ ] 2 never got here\n", encoding="utf-8")
+
+    result = run_work(doc, to="codex", client=CodexClient(executable=stub_codex.executable))
+
+    assert result.exit_code == ExitCode.INCOMPLETE
+    assert not result_path(doc).exists()
 
 
 def test_missing_completion_report_downgrades_ok_to_incomplete(doc: Path, stub_codex) -> None:

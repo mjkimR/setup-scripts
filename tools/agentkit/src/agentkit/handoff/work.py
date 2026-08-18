@@ -7,6 +7,10 @@ running the receiver faithfully and reporting what it said.
 
 The receiver's narration is always printed: for open-ended work it IS the
 deliverable (what was done, what remains), not noise to suppress.
+
+Two files sit beside the document, and the split between them matters: the
+progress file is a live, advisory checkbox view, while the completion report's
+mere existence is what marks the run finished.
 """
 
 from __future__ import annotations
@@ -50,12 +54,49 @@ def result_path(doc: Path) -> Path:
     return doc.with_name(doc.stem + "-result.md")
 
 
+def progress_path(doc: Path) -> Path:
+    """The live status view, updated mid-run — deliberately not the result file.
+
+    The completion report's existence is the outcome signal (see `_finish`), so
+    it must not appear until the work is done. Progress therefore gets its own
+    file: a checkbox mirror of the document's next steps that the receiver ticks
+    as it goes, and that a human can `tail` while the run is still going. It is
+    advisory only — nothing here decides the exit code.
+    """
+    return doc.with_name(doc.stem + "-progress.md")
+
+
+def _resume_hint(doc: Path) -> tuple[str, ...]:
+    """What to read after a run that stopped part-way, in the order to read it.
+
+    Every partial-work advisory ends here, because the answer is always the
+    same: the progress file says where it stopped. It says so without inviting
+    a retry — these advisories are `Retry.UNSAFE`, so the caller reports and
+    halts; resuming is the user's decision to make with that report in hand.
+    """
+    return (
+        f"{progress_path(doc)} shows how far it got: the first unticked step is where it stopped.",
+        "Resuming is possible — handing the same document over again skips ticked steps — "
+        "but that is the user's call, not an automatic retry.",
+    )
+
+
 def build_prompt(doc: Path, workdir: Path) -> str:
     return (
         f"Read the handoff document at {doc} and continue the work it describes.\n\n"
         f"Work in {workdir}. Follow the document's next steps in order, respect its\n"
         "decisions, and do not redo anything it lists as done. Treat the document\n"
         "itself as read-only.\n\n"
+        f"Before you start, read {progress_path(doc)}: it mirrors the document's\n"
+        "numbered next steps as checkboxes. Any step already ticked `[x]` was finished\n"
+        "by an earlier run that did not survive to report — take it as done, do not\n"
+        "redo it, and begin at the first unticked step, inspecting whatever that step\n"
+        "left half-finished before you continue it.\n\n"
+        "Keep that file current as you go. The moment you finish a step, flip its\n"
+        "`- [ ]` to `- [x]`; if a step is blocked or skipped, leave the box empty and\n"
+        "append ` — blocked: <one-line reason>` to that line. Change nothing else in\n"
+        "the file, and create it from the document's next steps if it is missing.\n"
+        "Updating it is not a reply and does not end your session.\n\n"
         f"When finished, write a completion report to {result_path(doc)} with four\n"
         "sections: what you completed, what remains, deviations from the document's\n"
         "plan, and the outcome of the document's verification commands.\n\n"
@@ -111,6 +152,7 @@ def run_work(
         f"(effort={client.effort or 'receiver default'}, model={client.model or 'receiver default'}, "
         f"timeout={client.timeout})…"
     )
+    out.note(f"Live progress: tail -f {progress_path(doc)}")
 
     if isinstance(client, CodexClient):
         return _run_codex(client, doc, workdir, out)
@@ -169,7 +211,7 @@ def _finish(receiver: str, doc: Path, out: Reporter, output: str) -> WorkResult:
                 "completion signal for open-ended work — so treat the run as unfinished. "
                 "Check the working tree against the handoff document before deciding anything."
             ),
-            details=("A receiver that replies early ends its session; partial work may exist.",),
+            details=("A receiver that replies early ends its session; partial work may exist.", *_resume_hint(doc)),
         ),
         "no completion report was written.",
     )
@@ -190,7 +232,7 @@ def _run_codex(client: CodexClient, doc: Path, workdir: Path, out: Reporter) -> 
                     "codex hit the timeout mid-work; some of the work may exist. "
                     "Check the working tree against the handoff document before deciding anything."
                 ),
-                details=("A larger --timeout, or a smaller handoff, is the usual answer.",),
+                details=("A larger --timeout, or a smaller handoff, is the usual answer.", *_resume_hint(doc)),
             ),
             f"codex timed out after {client.timeout}.",
         )
@@ -206,7 +248,7 @@ def _run_codex(client: CodexClient, doc: Path, workdir: Path, out: Reporter) -> 
                     f"codex exited with code {run.exit_code}. Partial work may exist; "
                     "check the working tree against the handoff document."
                 ),
-                details=("See the codex output above for the cause.",),
+                details=("See the codex output above for the cause.", *_resume_hint(doc)),
             ),
             f"codex exited with code {run.exit_code}.",
         )
@@ -232,7 +274,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
                     "agy auto-denied commands it needed, so the work is likely incomplete. "
                     "Open-ended work may need grants beyond the commit set — ask the user."
                 ),
-                details=(*denied, "Partial work may exist; check against the handoff document."),
+                details=(*denied, "Partial work may exist.", *_resume_hint(doc)),
             ),
             "agy hit a permission wall.",
         )
@@ -245,7 +287,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
                 retry=Retry.UNSAFE,
                 retry_after="the Antigravity rolling quota window resets (up to 5h)",
                 what_to_report="Antigravity quota is exhausted; the work handoff did not complete.",
-                details=("Partial work may exist; check against the handoff document.",),
+                details=("Partial work may exist.", *_resume_hint(doc)),
             ),
             "agy reported a usage limit.",
         )
@@ -272,7 +314,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
                     "agy timed out mid-work; some of the work may exist. "
                     "Check the working tree against the handoff document before deciding anything."
                 ),
-                details=("A larger --timeout, or a smaller handoff, is the usual answer.",),
+                details=("A larger --timeout, or a smaller handoff, is the usual answer.", *_resume_hint(doc)),
             ),
             "agy timed out before finishing.",
         )

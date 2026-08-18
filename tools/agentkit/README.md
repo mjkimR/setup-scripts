@@ -44,6 +44,22 @@ the root or, with `--shared`, moves the ignore entry into the committed
 `.gitignore`. Outside a git repository the path falls back under
 `~/.agents/tmp/`. Rationale in `docs/decisions/0003`.
 
+## Work handoff files
+
+`agentkit handoff work` expects three files sharing one stem in the scratch
+directory, each with a single writer and a single meaning:
+
+| File | Written by | Meaning |
+|---|---|---|
+| `<stem>.md` | the sending agent | the spec — read-only for the receiver |
+| `<stem>-progress.md` | sender writes the empty checklist, receiver ticks it | live status; `tail -f` it during a run, and it is what a resumed run reads to skip finished steps |
+| `<stem>-result.md` | the receiver, once, at the end | the completion report — its **existence** is the only signal that the run finished |
+
+Progress therefore never goes in the result file: that would make a half-done
+run indistinguishable from a finished one. Checkboxes are advisory — the verdict
+comes from the document's own verification commands. Rationale in
+`docs/decisions/0007`.
+
 ## Exit codes
 
 They are a contract — skills tell the calling agent what each one means.
@@ -67,7 +83,7 @@ src/agentkit/
   ui.py           tagged console output
   agy/            Antigravity CLI adapter: invocation, log parsing, permissions
   codex/          Codex CLI adapter: headless `codex exec` invocation
-  handoff/        commit: delegate-and-verify runner + task registry; work: continue a handoff document
+  handoff/        commit: delegate-and-verify runner + task registry; work: continue a handoff document (spec/progress/result)
   commitsafe/     config, identity whitelist, timestamp timeline
   commands/       click bindings (domain modules stay click-free)
 ```
