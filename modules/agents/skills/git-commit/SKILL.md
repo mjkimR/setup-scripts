@@ -20,6 +20,8 @@ Configuration is maintained **per-repository** at `<git-dir>/agentkit-commit.jso
      - **Whitelist Check**: (on/off) Verifies `git config user.email` against allowed list.
      - **Timeline Control**: (on/off) Enforces daily time windows (e.g. 19:00~21:00) and commit gaps.
      - **Conventions & Language**: (ko / en) Specific commit message template and tone.
+     - **Hooks Policy**: how multi-commit splits treat git hooks. Default `bypass-intermediate`: intermediate commits use `git commit --no-verify`, the final commit runs hooks normally. `run-all` (keep every commit hook-green) is a recognized option that fails as **not implemented** — choosing it must error loudly, never silently degrade.
+     - **Verify Commands**: (`verify.test` / `verify.lint`, plus `verify.enabled` on/off) shell commands that verify the tree (e.g. `uv run pytest -q`, `ruff check`). An empty field skips that kind of verification; `verify.enabled=false` switches all of it off while keeping the commands on record — for repos whose tests are known-broken and mid-repair. Transparency is non-negotiable: whoever runs these must show the exact command line (`agentkit commit verify` echoes each one before running it).
    - On first use in a repository, the agent enters **Onboarding Mode** to analyze history and establish these settings.
    - Subsequent runs seamlessly use the saved settings. Re-onboarding can be triggered anytime with `/git-commit onboard`.
 
@@ -41,6 +43,7 @@ Configuration is maintained **per-repository** at `<git-dir>/agentkit-commit.jso
      - If commit dates are already exported in the environment, do not resolve or override them.
      - If the prompt carries caller hints (suggested commit units), use them to group and order the commits — but as advice, not instruction: the diff is the ground truth. Never create an empty or padded commit to match the hint count, never leave a change uncommitted because no hint covers it, and never reuse a hint verbatim as a subject — write subjects to the repository conventions. Report any hint/tree mismatch at the end.
      - If the prompt attests the test-suite state (`passed` / `failed` / `not-run`), trust it: do not run tests, builds, or linters yourself. `failed` is not a reason to hold back commits, and the attestation never goes into a commit message.
+     - If the prompt states a hook policy (`bypass-intermediate`), follow it mechanically: `git commit --no-verify` for every commit that leaves changes uncommitted, plain `git commit` for the one that empties the tree. The policy comes from repo config — never add `--no-verify` on your own judgment, in either direction.
      - Never stop to prompt interactively during a headless run.
 
 ---
@@ -64,9 +67,12 @@ agentkit commit config
      - **Timeline**: Enable time window spoofing? (Default: ON, 19:00~21:00 Asia/Seoul)
      - **Language**: Preferred commit language (`ko` / `en`)
      - **Style & Template**: Detected style (Conventional / Bracketed / Ticket) and template
+     - **Verify commands**: how to run this repo's tests and linter. If the repo has a ready-made entry point (Makefile target, package script), store that. If not, ask the user to choose: generate a small script and store its path, or store the raw shell command inline. Leaving a field empty deliberately skips that verification everywhere. Also confirm `verify.enabled`: a repo with known-broken tests can record the commands now but start switched off (`--no-verify`), flipping it back on with `agentkit commit config --set verify.enabled=true` once fixed.
+     - **Hooks policy**: default `bypass-intermediate`; offer `run-all` only as a visibly closed option (it errors as not implemented).
   3. Save the configuration:
      ```bash
-     agentkit commit onboard --language <ko|en> --style <style> [--whitelist/--no-whitelist] [--timeline/--no-timeline]
+     agentkit commit onboard --language <ko|en> --style <style> [--whitelist/--no-whitelist] [--timeline/--no-timeline] \
+       [--test-cmd "<command>"] [--lint-cmd "<command>"] [--verify/--no-verify] [--hooks <policy>]
      ```
   *(In a headless handoff run, `agentkit commit onboard` will initialize auto-detected defaults automatically without prompting).*
 
@@ -74,7 +80,31 @@ agentkit commit config
 
 ---
 
-### Step 1: Inspect Working Tree & Differences
+### Step 1: Verify, then Inspect Working Tree & Differences
+
+**Verification first — interactive (non-handoff) runs only.** When the caller
+did not attest the test state, run the repo's configured verification before
+any staging:
+
+```bash
+agentkit commit verify
+```
+
+It echoes every command verbatim (`[verify] $ …`) before running it, so the
+user always sees exactly what executed. It exits 0 with a printed `[SKIP]`
+when `verify.enabled=false` — a repo mid-repair opts out this way; respect it
+and do not run the commands anyway — and a printed `[INFO]` when nothing is
+configured. Running the commands yourself instead is fine (`agentkit commit
+config` shows them), as long as the command line stays equally visible to the
+user; never run verification in a way that hides what was executed.
+
+A failure is worth surfacing before anything is committed; committing anyway is
+the user's call, not a default. In a **handoff run**, skip verification
+entirely — the caller's attestation (or its absence) governs, only git commands
+are permitted, and running or speculating about tests is explicitly out of
+scope there.
+
+Then inspect:
 
 ```bash
 # Overview of branch and working tree

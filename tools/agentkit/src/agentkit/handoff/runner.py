@@ -30,7 +30,7 @@ from ..errors import (
     NotOnboardedError,
     Retry,
 )
-from ..repoconfig import load_repo_config, repo_config_path
+from ..repoconfig import ensure_supported_hooks_policy, load_repo_config, repo_config_path
 from ..ui import Reporter
 from .tasks import HandoffTask
 
@@ -69,6 +69,20 @@ def run_handoff(
     if not pending:
         out.note("Working tree is clean — nothing to commit. Skipping handoff.")
         return HandoffResult(ExitCode.OK)
+
+    # A self-check nudge, not a gate: the receiver cannot run these commands,
+    # so an attestation the caller forgot to give is lost for good here.
+    # verify.enabled=false silences it — a repo mid-repair opted out on purpose.
+    if tests is None:
+        repo_cfg = load_repo_config(cwd=root)
+        active = repo_cfg.verify.active() if repo_cfg is not None else []
+        if active:
+            named = "; ".join(f"{name}: `{cmd}`" for name, cmd in active)
+            out.note(
+                f"No --tests attestation, but this repo names verify commands ({named}). "
+                "Proceeding unattested — `agentkit commit verify` runs them (echoing each), "
+                "or attest with --tests when they already ran on exactly this tree."
+            )
 
     if task.per_unit:
         out.note(f"Delegating {len(pending)} pending file(s) to agy, one atomic unit per call…")
@@ -199,6 +213,9 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
         # must hold for the plain task too, or disabling the timeline would
         # silently disable identity checking with it.
         checked_identity(cwd=root)
+        # Catches a hand-edited config: the CLI refuses to *set* run-all, but
+        # the JSON file is just a file.
+        ensure_supported_hooks_policy(repo_cfg.hooks.policy)
 
     # Check required permission grants before invoking agy.
     missing = missing_rules(task.grants)

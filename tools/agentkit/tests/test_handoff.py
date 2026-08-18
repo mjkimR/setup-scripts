@@ -15,7 +15,7 @@ import pytest
 from agentkit import gitutil
 from agentkit.errors import ConfigError, ExitCode, PreflightError
 from agentkit.handoff import get_task, run_handoff
-from agentkit.repoconfig import RepoConfig, WhitelistConfig, save_repo_config
+from agentkit.repoconfig import RepoConfig, WhitelistConfig, load_repo_config, save_repo_config
 
 pytestmark = pytest.mark.integration
 
@@ -94,6 +94,74 @@ def test_the_prompt_always_carries_the_grouping_rules(repo, granted, stub_agy, p
     assert "Never split one file's" in prompt
     assert "do not need to keep tests or\n  the build green" in prompt
     assert "Never run tests" in prompt
+
+
+def test_the_prompt_carries_the_hook_policy(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy)
+
+    prompt = stub_agy.calls()[0]["prompt"]
+    assert "bypass-intermediate" in prompt
+    assert "--no-verify" in prompt
+    # The final commit must run hooks; only intermediate ones bypass.
+    assert "plain `git commit`" in prompt
+
+
+def test_a_hand_edited_run_all_policy_stops_the_preflight(repo, granted, stub_agy, pending_file):
+    """The CLI refuses to set run-all, but the JSON is just a file — a
+    hand-edited policy must fail loudly before any quota is spent."""
+    cfg = load_repo_config(cwd=repo)
+    cfg.hooks.policy = "run-all"
+    save_repo_config(cfg, cwd=repo)
+    pending_file("a.txt")
+
+    with pytest.raises(ConfigError) as caught:
+        run(COMMIT, repo, stub_agy)
+
+    assert "not implemented" in str(caught.value)
+    assert stub_agy.calls() == []
+
+
+def test_missing_attestation_with_verify_commands_prints_a_nudge(repo, granted, stub_agy, pending_file, capsys):
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "uv run pytest -q"
+    save_repo_config(cfg, cwd=repo)
+    pending_file("a.txt")
+
+    result = run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr()
+    # A nudge, not a gate: the handoff still runs and succeeds.
+    assert result.exit_code == ExitCode.OK
+    assert "uv run pytest -q" in reported.out + reported.err
+
+
+def test_an_attested_handoff_gets_no_nudge(repo, granted, stub_agy, pending_file, capsys):
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "uv run pytest -q"
+    save_repo_config(cfg, cwd=repo)
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy, tests="passed")
+
+    reported = capsys.readouterr()
+    assert "verify commands" not in reported.out + reported.err
+
+
+def test_a_disabled_verify_config_silences_the_nudge(repo, granted, stub_agy, pending_file, capsys):
+    """verify.enabled=false is a deliberate opt-out (tests mid-repair);
+    nagging about the attestation would contradict it."""
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "uv run pytest -q"
+    cfg.verify.enabled = False
+    save_repo_config(cfg, cwd=repo)
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr()
+    assert "verify commands" not in reported.out + reported.err
 
 
 def test_hints_and_attestation_reach_the_prompt(repo, granted, stub_agy, pending_file):

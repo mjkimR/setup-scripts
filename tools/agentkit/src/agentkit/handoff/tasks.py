@@ -122,6 +122,7 @@ class HandoffTask:
     ) -> str:
         repo_cfg = load_repo_config(cwd=repo_root)
         conventions_note = ""
+        hooks_note = ""
         if repo_cfg is not None:
             lang_note = "Korean (한국어)" if repo_cfg.conventions.language == "ko" else "English"
             conventions_note = (
@@ -130,12 +131,23 @@ class HandoffTask:
                 f"- Style: {repo_cfg.conventions.style}\n"
                 f"- Template:\n{repo_cfg.conventions.template}\n"
             )
+            # Only bypass-intermediate reaches this point: the runner's
+            # preflight refuses every other policy value before delegating.
+            if repo_cfg.hooks.policy == "bypass-intermediate":
+                hooks_note = (
+                    "\nHook policy (bypass-intermediate): a commit that leaves further "
+                    "changes\nuncommitted gets `git commit --no-verify`. The commit that "
+                    "makes the working\ntree clean is a plain `git commit`, so hooks run "
+                    "once, on the final state.\nThis is configured, not yours to decide — "
+                    "never add --no-verify anywhere else.\n"
+                )
 
         return (
             f"{self.skill}\n\n"
             f"Work only in {repo_root} — that is the repository to commit.\n\n"
             f"{_GIT_ONLY}\n\n"
-            f"{_GROUPING_RULES}\n\n"
+            f"{_GROUPING_RULES}\n"
+            f"{hooks_note}\n"
             f"{self.instructions}\n"
             f"{_caller_context(hints, tests, per_unit=self.per_unit)}"
             f"{conventions_note}"

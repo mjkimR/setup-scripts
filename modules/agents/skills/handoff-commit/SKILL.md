@@ -64,9 +64,19 @@ them rather than doing any work to fill them in:
   split? Pass no hints.
 - `--tests passed|failed|not-run` — attest the test-suite state of exactly the
   tree being handed off, so `agy` neither runs nor speculates about tests.
-  Claim `passed` only if the suite ran after the last edit to the tree; if
-  anything changed since, or you are unsure, say `not-run`. Never launch a
-  test run just to fill this flag in.
+  Claim `passed` only if the commands ran after the last edit to the tree; if
+  anything changed since, or you are unsure, say `not-run`.
+
+  The repo config may name what "verified" means here (`verify.test` /
+  `verify.lint`, shown by `agentkit commit config`). Running those commands is
+  part of finishing the work — if they have not run on this exact tree, run
+  `agentkit commit verify` first (it echoes each command verbatim before
+  running it, so the user sees exactly what executed) or attest `not-run`
+  honestly; lint counts, not just tests. When the fields are empty, or the
+  repo switched verification off (`verify.enabled=false` — e.g. tests
+  known-broken and mid-repair), the topic is skipped entirely: attest nothing,
+  run nothing. Omitting `--tests` while active verify commands exist prints a
+  one-line reminder before the delegation; it never blocks.
 
 Example — work that landed as an API change plus its docs, tests green:
 

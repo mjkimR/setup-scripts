@@ -1,7 +1,10 @@
 # 4. Carry caller context into the commit handoff
 
 - **Date**: 2026-08-18
-- **Status**: Accepted
+- **Status**: Accepted, extended by
+  [0005](./0005-hook-policy-and-repo-verify-commands.md) (which also
+  supersedes the "never launch a test run just to fill the flag in" rule for
+  repos with configured verify commands)
 - **Amends**: [0001](./0001-delegate-commits-to-antigravity-cli.md) — the
   "requesting session performs no commit work" rule gains one narrow,
   memory-only exception.

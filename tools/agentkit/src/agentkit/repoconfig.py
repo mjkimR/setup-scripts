@@ -49,6 +49,62 @@ class ConventionConfig:
     rules: list[str] = field(default_factory=list)
 
 
+# "bypass-intermediate": commits that leave further changes uncommitted use
+# `git commit --no-verify`; the commit that empties the working tree runs
+# hooks normally. "run-all" (keep every intermediate commit hook-green) is a
+# reserved choice: recognized so the option space is visible, refused because
+# nothing implements the grouping constraints it would impose.
+HOOKS_POLICIES = ("bypass-intermediate", "run-all")
+DEFAULT_HOOKS_POLICY = "bypass-intermediate"
+
+
+@dataclass
+class HooksConfig:
+    policy: str = DEFAULT_HOOKS_POLICY
+
+
+@dataclass
+class VerifyConfig:
+    """Repo-provided verification commands; empty string means unconfigured.
+
+    `enabled` exists apart from the commands so a repo mid-repair (tests
+    known-broken and being fixed) can switch verification off without erasing
+    the commands it will want back.
+    """
+
+    enabled: bool = True
+    test: str = ""
+    lint: str = ""
+
+    def configured(self) -> list[tuple[str, str]]:
+        return [(name, cmd) for name, cmd in (("test", self.test), ("lint", self.lint)) if cmd.strip()]
+
+    def active(self) -> list[tuple[str, str]]:
+        """The commands that should actually run: configured and not switched off."""
+        return self.configured() if self.enabled else []
+
+
+def ensure_supported_hooks_policy(policy: str) -> None:
+    """Reject unknown policies and the recognized-but-closed `run-all`."""
+    if policy not in HOOKS_POLICIES:
+        raise ConfigError(
+            f"unknown hooks.policy: {policy!r} (valid: {', '.join(HOOKS_POLICIES)}).",
+            fix=f"agentkit commit config --set hooks.policy={DEFAULT_HOOKS_POLICY}",
+            what_to_report="The repository's hooks.policy value is invalid; commits cannot proceed until it is fixed.",
+        )
+    if policy == "run-all":
+        raise ConfigError(
+            "hooks.policy=run-all is not implemented: keeping every intermediate commit hook-green "
+            "is not supported yet.",
+            fix=f"agentkit commit config --set hooks.policy={DEFAULT_HOOKS_POLICY}",
+            what_to_report=(
+                "hooks.policy=run-all was requested but is not implemented; the user must fall back to "
+                "bypass-intermediate or wait for the feature."
+            ),
+            details=["The option is reserved on purpose — choosing it must fail loudly, not silently degrade."],
+        )
+
+
 CURRENT_CONFIG_VERSION = 1
 
 
@@ -59,6 +115,8 @@ class RepoConfig:
     whitelist: WhitelistConfig = field(default_factory=WhitelistConfig)
     timeline: TimelineConfig = field(default_factory=TimelineConfig)
     conventions: ConventionConfig = field(default_factory=ConventionConfig)
+    hooks: HooksConfig = field(default_factory=HooksConfig)
+    verify: VerifyConfig = field(default_factory=VerifyConfig)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -70,6 +128,8 @@ class RepoConfig:
         whitelist_data = data.get("whitelist", {}) if isinstance(data.get("whitelist"), dict) else {}
         timeline_data = data.get("timeline", {}) if isinstance(data.get("timeline"), dict) else {}
         conventions_data = data.get("conventions", {}) if isinstance(data.get("conventions"), dict) else {}
+        hooks_data = data.get("hooks", {}) if isinstance(data.get("hooks"), dict) else {}
+        verify_data = data.get("verify", {}) if isinstance(data.get("verify"), dict) else {}
 
         return cls(
             path=path,
@@ -93,6 +153,14 @@ class RepoConfig:
                     "<type>(<scope>): <subject>\n\n<summary>\n- <bullet point 1>\n- <bullet point 2>",
                 ),
                 rules=list(conventions_data.get("rules", [])),
+            ),
+            hooks=HooksConfig(
+                policy=hooks_data.get("policy", DEFAULT_HOOKS_POLICY),
+            ),
+            verify=VerifyConfig(
+                enabled=verify_data.get("enabled", True),
+                test=verify_data.get("test", ""),
+                lint=verify_data.get("lint", ""),
             ),
         )
 

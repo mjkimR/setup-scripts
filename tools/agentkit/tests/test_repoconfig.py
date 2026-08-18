@@ -158,3 +158,129 @@ def test_repo_config_migration_and_backfill(repo: Path) -> None:
     assert loaded.timeline.enabled is True
     assert loaded.timeline.start == "19:00"
     assert loaded.conventions.language == "ko"
+    # Pre-hooks/verify configs get the safe defaults
+    assert loaded.hooks.policy == "bypass-intermediate"
+    assert loaded.verify.configured() == []
+
+
+def test_verify_commands_roundtrip_and_report_configured(repo: Path) -> None:
+    from agentkit.repoconfig import VerifyConfig
+
+    cfg = RepoConfig(path=repo_config_path(cwd=repo), verify=VerifyConfig(test="uv run pytest -q"))
+    save_repo_config(cfg, cwd=repo)
+
+    loaded = load_repo_config(cwd=repo)
+    assert loaded is not None
+    assert loaded.verify.test == "uv run pytest -q"
+    # Only the configured half shows up; the empty lint field is skipped.
+    assert loaded.verify.configured() == [("test", "uv run pytest -q")]
+    assert loaded.verify.active() == loaded.verify.configured()
+
+    # The off switch empties active() but keeps the commands on record —
+    # a repo mid-repair must not have to erase what it will want back.
+    loaded.verify.enabled = False
+    save_repo_config(loaded, cwd=repo)
+    reloaded = load_repo_config(cwd=repo)
+    assert reloaded is not None
+    assert reloaded.verify.enabled is False
+    assert reloaded.verify.configured() == [("test", "uv run pytest -q")]
+    assert reloaded.verify.active() == []
+
+
+def test_commit_verify_echoes_each_command_before_running(repo: Path, monkeypatch) -> None:
+    """Transparency is the wrapper's contract: the exact command line must be
+    printed, and the command must actually execute."""
+    from agentkit.repoconfig import VerifyConfig
+
+    marker = repo / "verify-ran.marker"
+    cfg = RepoConfig(
+        path=repo_config_path(cwd=repo),
+        verify=VerifyConfig(test=f"touch {marker.name}", lint="true"),
+    )
+    save_repo_config(cfg, cwd=repo)
+    monkeypatch.chdir(repo)
+
+    res = CliRunner().invoke(cli, ["commit", "verify"])
+
+    assert res.exit_code == 0
+    assert f"[verify] $ touch {marker.name}" in res.output
+    assert "[verify] $ true" in res.output
+    assert "[OK] test, lint passed" in res.output
+    assert marker.is_file()
+
+
+def test_commit_verify_propagates_the_failing_exit_code(repo: Path, monkeypatch) -> None:
+    from agentkit.repoconfig import VerifyConfig
+
+    cfg = RepoConfig(
+        path=repo_config_path(cwd=repo),
+        verify=VerifyConfig(test="exit 7", lint="touch lint-ran.marker"),
+    )
+    save_repo_config(cfg, cwd=repo)
+    monkeypatch.chdir(repo)
+
+    res = CliRunner().invoke(cli, ["commit", "verify"])
+
+    assert res.exit_code == 7
+    assert "[FAIL] test failed (exit 7)" in res.output
+    # Stops at the first failure; lint never ran.
+    assert not (repo / "lint-ran.marker").is_file()
+
+
+def test_commit_verify_respects_the_off_switch(repo: Path, monkeypatch) -> None:
+    from agentkit.repoconfig import VerifyConfig
+
+    cfg = RepoConfig(
+        path=repo_config_path(cwd=repo),
+        verify=VerifyConfig(enabled=False, test="touch should-not-exist.marker"),
+    )
+    save_repo_config(cfg, cwd=repo)
+    monkeypatch.chdir(repo)
+
+    res = CliRunner().invoke(cli, ["commit", "verify"])
+
+    # Skipping is loud (printed) but successful (exit 0), and nothing runs.
+    assert res.exit_code == 0
+    assert "[SKIP]" in res.output
+    assert not (repo / "should-not-exist.marker").is_file()
+
+
+def test_commit_verify_only_filters_to_one_command(repo: Path, monkeypatch) -> None:
+    from agentkit.repoconfig import VerifyConfig
+
+    cfg = RepoConfig(
+        path=repo_config_path(cwd=repo),
+        verify=VerifyConfig(test="touch test-ran.marker", lint="touch lint-ran.marker"),
+    )
+    save_repo_config(cfg, cwd=repo)
+    monkeypatch.chdir(repo)
+
+    res = CliRunner().invoke(cli, ["commit", "verify", "--only", "lint"])
+
+    assert res.exit_code == 0
+    assert (repo / "lint-ran.marker").is_file()
+    assert not (repo / "test-ran.marker").is_file()
+
+
+def test_run_all_hooks_policy_is_refused_everywhere(repo: Path, monkeypatch) -> None:
+    """The option is visible but closed: onboarding and --set both fail loudly,
+    so the config file never ends up holding a policy the runner would reject."""
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+
+    res = runner.invoke(cli, ["commit", "onboard", "--hooks", "run-all"])
+    assert res.exit_code != 0
+    assert "not implemented" in res.output
+    assert load_repo_config(cwd=repo) is None
+
+    res = runner.invoke(cli, ["commit", "onboard", "--test-cmd", "uv run pytest -q", "--lint-cmd", "ruff check"])
+    assert res.exit_code == 0
+
+    res = runner.invoke(cli, ["commit", "config", "--set", "hooks.policy=run-all"])
+    assert res.exit_code != 0
+    assert "not implemented" in res.output
+    loaded = load_repo_config(cwd=repo)
+    assert loaded is not None
+    assert loaded.hooks.policy == "bypass-intermediate"
+    assert loaded.verify.test == "uv run pytest -q"
+    assert loaded.verify.lint == "ruff check"
