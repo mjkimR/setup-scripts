@@ -227,6 +227,29 @@ def test_a_malformed_hint_is_a_usage_error(argv):
     assert result.exit_code == int(ExitCode.USAGE)
 
 
+def test_a_hint_commit_count_mismatch_is_reported_on_success(repo, granted, stub_agy, pending_file, capsys):
+    """Success drops agy's narration, so the runner's count note is the only
+    surviving trace of a hint the diff did not support."""
+    pending_file("a.txt")
+
+    result = run(COMMIT, repo, stub_agy, hints=("feat: unit a", "feat: unit b", "feat: unit c"))
+
+    reported = capsys.readouterr()
+    assert result.exit_code == ExitCode.OK
+    assert "3 hint(s), 1 commit(s)" in reported.out + reported.err
+    assert "hints are advisory" in reported.out + reported.err
+
+
+def test_matching_hint_and_commit_counts_stay_quiet(repo, granted, stub_agy, pending_file, capsys):
+    pending_file("a.txt")
+
+    result = run(COMMIT, repo, stub_agy, hints=("feat: the one unit",))
+
+    reported = capsys.readouterr()
+    assert result.exit_code == ExitCode.OK
+    assert "hints are advisory" not in reported.out + reported.err
+
+
 def test_hint_length_and_count_are_not_capped(repo, granted, stub_agy, pending_file):
     """Receiver-side quota is the cheap side of the handoff: a long memory of
     the work, or many units, must pass through rather than exit 64."""
@@ -263,6 +286,40 @@ def test_a_denied_run_is_not_mistaken_for_success(repo, granted, stub_agy, pendi
     assert "HEAD did not move" in reported.err
     # The denied command is only ever named in agy's log file.
     assert "git ls-files --others" in reported.err
+
+
+def test_an_out_of_scope_denial_is_a_prompt_bug_not_a_grant_problem(
+    repo, granted, stub_agy, pending_file, capsys, monkeypatch
+):
+    """Seen live (2026-08-18): agy was denied `git show`, which no grant will
+    ever cover, yet the advisory said `agentkit agy grant` — a fix that changes
+    nothing and invites a retry loop against the same wall."""
+    pending_file("a.txt")
+    stub_agy.mode("none")
+    monkeypatch.setenv("AGY_STUB_DENIED", "git show --stat d659451")
+
+    result = run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr().err
+    assert result.exit_code == ExitCode.FAILED
+    assert "outside the task's permitted set" in reported
+    assert "Out of scope: git show --stat d659451" in reported
+    assert "[ACTION] HALT" in reported
+    # The one fix that cannot help must not be offered.
+    assert "agentkit agy grant" not in reported
+
+
+def test_an_in_scope_denial_still_points_at_the_grant_fix(repo, granted, stub_agy, pending_file, capsys, monkeypatch):
+    pending_file("a.txt")
+    stub_agy.mode("none")
+    monkeypatch.setenv("AGY_STUB_DENIED", "git ls-files --others")
+
+    result = run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr().err
+    assert result.exit_code == ExitCode.FAILED
+    assert "agentkit agy grant" in reported
+    assert "outside the task's permitted set" not in reported
 
 
 def test_an_authentication_failure_is_named(repo, granted, stub_agy, pending_file, capsys):

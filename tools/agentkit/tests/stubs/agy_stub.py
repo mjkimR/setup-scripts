@@ -82,8 +82,11 @@ def main() -> int:
         print("a tool required the command permission, but headless mode cannot prompt")
         log_file = args.get("log_file")
         if log_file:
+            # Overridable so tests can deny a command outside the task's
+            # permitted set, not just an in-scope one missing its grant.
+            denied = os.environ.get("AGY_STUB_DENIED", "git ls-files --others")
             Path(log_file).write_text(
-                'permission check failed for command "git ls-files --others"\n',
+                f'permission check failed for command "{denied}"\n',
                 encoding="utf-8",
             )
         return 0

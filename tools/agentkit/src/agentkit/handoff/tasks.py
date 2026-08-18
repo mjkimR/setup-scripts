@@ -23,6 +23,14 @@ COMMIT_GRANTS: tuple[str, ...] = (
 # command(git reset) is deliberately absent. The agent reaches for
 # `git add -N <path> && git diff <path> && git reset <path>` to inspect untracked
 # files, but a prefix rule for `git reset` would also permit `git reset --hard`.
+# The same six verbs _GIT_ONLY spells out in prose, as command prefixes: what
+# the task actually authorizes the receiver to run. A denial outside this set
+# is a prompt bug (the receiver was steered to a command it may never run),
+# not a missing grant — the two need different fixes.
+PERMITTED_GIT_COMMANDS: tuple[str, ...] = tuple(
+    f"git {verb}" for verb in ("log", "diff", "status", "ls-files", "add", "commit")
+)
+
 _GIT_ONLY = """Only git commands are permitted, and only these: log, diff, status, ls-files,
 add, commit. Anything else — cat, ls, pwd, bash, and notably `git reset` — is
 denied, and in a && chain one denied segment kills the whole command. To read an
@@ -111,6 +119,7 @@ class HandoffTask:
     skill: str
     instructions: str
     grants: tuple[str, ...] = ()
+    permitted: tuple[str, ...] = PERMITTED_GIT_COMMANDS
     per_unit: bool = False
     log_format: str = "%h  %s"
     date_format: str | None = None

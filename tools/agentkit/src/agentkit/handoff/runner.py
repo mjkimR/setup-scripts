@@ -177,11 +177,30 @@ def run_handoff(
         result.exit_code = ExitCode.INCOMPLETE
         return result
 
+    # The spec tells agy to report hint/tree mismatches, but success drops its
+    # narration — so on success this note is the only place the mismatch can
+    # surface. Count disagreement is the observable trace of one.
+    if hints and len(result.commits) != len(hints):
+        out.note(
+            f"{len(hints)} hint(s), {len(result.commits)} commit(s) — hints are advisory, so the "
+            "unmatched ones were likely already committed earlier, absent from the diff, or grouped "
+            "together. Nothing was left uncommitted."
+        )
+
     if task.per_unit:
         out.note(f"Created {len(result.commits)} commit(s) across {result.units} unit(s). Working tree is clean.")
     else:
         out.note("Working tree is clean.")
     return result
+
+
+def _outside_task_scope(denied: list[str], task: HandoffTask) -> list[str]:
+    """The denied commands the task's own prompt never authorizes."""
+
+    def permitted(cmd: str) -> bool:
+        return any(cmd == prefix or cmd.startswith(prefix + " ") for prefix in task.permitted)
+
+    return [cmd for cmd in denied if not permitted(cmd)]
 
 
 def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Path:
@@ -257,16 +276,40 @@ def _report_nothing_happened(
     wait_it_out = Retry.UNSAFE if result.commits else Retry.SAFE
 
     if run.hit_permission_wall:
-        denied = tuple(f"Denied: {cmd}" for cmd in run.denied_commands() or ["(agy's log named none)"])
-        cause = "a command was auto-denied for lack of permission."
-        advisory = Advisory(
-            code=ErrorCode.AGY_PERMISSION_DENIED,
-            actor=Actor.TOOL,
-            retry=after_fix,
-            fix="agentkit agy grant",
-            what_to_report="agy execution permission was denied; no commits were created.",
-            details=(*denied, left, "No retry was attempted."),
-        )
+        denied_commands = run.denied_commands()
+        out_of_scope = _outside_task_scope(denied_commands, task)
+        if out_of_scope:
+            # `agentkit agy grant` cannot help here: the denied command is one
+            # this task never authorizes, so the prompt steered agy somewhere
+            # the allow-list is *supposed* to block. Suggesting the grant fix
+            # sends the user into a retry loop against the same wall.
+            cause = "agy reached for a command outside the task's permitted set."
+            advisory = Advisory(
+                code=ErrorCode.AGY_PERMISSION_DENIED,
+                actor=Actor.TOOL,
+                retry=Retry.UNSAFE,
+                what_to_report=(
+                    "agy was denied a command this task never permits — granting more permissions is "
+                    "not the fix. This is a bug in the handoff prompt; report it, including the "
+                    "denied command below."
+                ),
+                details=(
+                    *(f"Out of scope: {cmd}" for cmd in out_of_scope),
+                    left,
+                    "No retry was attempted.",
+                ),
+            )
+        else:
+            denied = tuple(f"Denied: {cmd}" for cmd in denied_commands or ["(agy's log named none)"])
+            cause = "a command was auto-denied for lack of permission."
+            advisory = Advisory(
+                code=ErrorCode.AGY_PERMISSION_DENIED,
+                actor=Actor.TOOL,
+                retry=after_fix,
+                fix="agentkit agy grant",
+                what_to_report="agy execution permission was denied; no commits were created.",
+                details=(*denied, left, "No retry was attempted."),
+            )
     elif run.looks_quota_limited:
         # Before the auth check: a spent-quota message routinely says "token".
         cause = "agy reported a usage limit."
