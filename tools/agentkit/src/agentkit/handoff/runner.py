@@ -59,6 +59,8 @@ def run_handoff(
     repo: Path | None = None,
     max_units: int = DEFAULT_MAX_UNITS,
     verbose: bool = False,
+    hints: tuple[str, ...] = (),
+    tests: str | None = None,
 ) -> HandoffResult:
     out = reporter or Reporter(task.tag)
     root = _preflight(task, client=client, repo=repo)
@@ -76,7 +78,7 @@ def run_handoff(
         )
 
     result = HandoffResult(ExitCode.OK)
-    prompt = task.prompt(root)
+    prompt = task.prompt(root, hints=hints, tests=tests)
 
     while True:
         result.units += 1

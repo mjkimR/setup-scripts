@@ -27,6 +27,22 @@ def handoff() -> None:
     """Hand a job to `agy` and verify the outcome from git."""
 
 
+# Shape checks only: one flag is one unit is one line. Length and count are
+# deliberately unenforced — "subject-sized" is advice to the caller about its
+# own effort, and the receiver's quota is the cheap side of the handoff.
+def _validate_hints(
+    ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
+) -> tuple[str, ...]:
+    for hint in value:
+        if not hint.strip():
+            raise click.BadParameter("a hint must not be empty.")
+        if "\n" in hint:
+            raise click.BadParameter(
+                f"a hint must be a single line — pass one --hint per intended commit: {hint!r}"
+            )
+    return tuple(hint.strip() for hint in value)
+
+
 @handoff.command("commit")
 @click.option(
     "--safe/--plain",
@@ -56,6 +72,25 @@ def handoff() -> None:
     help="Loop guard for --safe; ignored otherwise.",
 )
 @click.option(
+    "--hint",
+    "hints",
+    multiple=True,
+    callback=_validate_hints,
+    help=(
+        "One intended commit per flag, in order: a one-line, subject-sized label "
+        "written from memory of the work. Advisory — agy follows the diff where they disagree."
+    ),
+)
+@click.option(
+    "--tests",
+    type=click.Choice(["passed", "failed", "not-run"]),
+    default=None,
+    help=(
+        "Attest the test-suite state of exactly the tree being handed off, "
+        "so agy neither runs nor speculates about tests. Omit if unknown."
+    ),
+)
+@click.option(
     "--verbose",
     is_flag=True,
     envvar="AGENTKIT_VERBOSE",
@@ -68,6 +103,8 @@ def commit(
     effort: str,
     timeout: str,
     max_units: int,
+    hints: tuple[str, ...],
+    tests: str | None,
     verbose: bool,
 ) -> None:
     """Delegate committing the working tree.
@@ -99,6 +136,8 @@ def commit(
         client=AgyClient(effort=effort, timeout=timeout),
         max_units=max_units,
         verbose=verbose,
+        hints=hints,
+        tests=tests,
     )
     ctx.exit(int(result.exit_code))
 

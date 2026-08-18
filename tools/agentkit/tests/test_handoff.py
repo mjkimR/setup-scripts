@@ -83,6 +83,94 @@ def test_the_prompt_pins_the_repository_and_the_skill(repo, granted, stub_agy, p
     assert call["add_dir"] == str(repo)
 
 
+def test_the_prompt_always_carries_the_grouping_rules(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy)
+
+    prompt = stub_agy.calls()[0]["prompt"]
+    # The two standing rules from the spec update: whole files only, and no
+    # effort spent keeping intermediate commits green.
+    assert "Never split one file's" in prompt
+    assert "do not need to keep tests or\n  the build green" in prompt
+    assert "Never run tests" in prompt
+
+
+def test_hints_and_attestation_reach_the_prompt(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+
+    run(
+        COMMIT,
+        repo,
+        stub_agy,
+        hints=("feat: add pagination", "docs: describe cursors"),
+        tests="passed",
+    )
+
+    prompt = stub_agy.calls()[0]["prompt"]
+    assert "Caller context" in prompt
+    assert "1. feat: add pagination" in prompt
+    assert "2. docs: describe cursors" in prompt
+    # The boundary conditions ride along with the hints: advisory only, diff
+    # wins, no padded commits, subjects are the receiver's to write.
+    assert "not final subjects" in prompt
+    assert "ground truth" in prompt
+    assert "empty or padded commit" in prompt
+    assert "it passed" in prompt
+    assert "do not re-run" in prompt
+
+
+def test_without_caller_flags_the_prompt_stays_as_before(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy)
+
+    assert "Caller context" not in stub_agy.calls()[0]["prompt"]
+
+
+def test_a_failed_attestation_still_authorizes_the_commit(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy, tests="failed")
+
+    prompt = stub_agy.calls()[0]["prompt"]
+    assert "failing on this tree" in prompt
+    assert "not a reason to hold back" in prompt
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["handoff", "commit", "--hint", "line one\nline two"],
+        ["handoff", "commit", "--hint", ""],
+    ],
+    ids=["multiline", "empty"],
+)
+def test_a_malformed_hint_is_a_usage_error(argv):
+    """A bad hint means the calling skill built a bad command line: exit 64,
+    refused at parse time, before any repo access or quota spend. Shape only —
+    length and count are advisory, so only a broken line structure is refused."""
+    from click.testing import CliRunner
+
+    from agentkit.cli import cli
+
+    result = CliRunner().invoke(cli, argv)
+
+    assert result.exit_code == int(ExitCode.USAGE)
+
+
+def test_hint_length_and_count_are_not_capped(repo, granted, stub_agy, pending_file):
+    """Receiver-side quota is the cheap side of the handoff: a long memory of
+    the work, or many units, must pass through rather than exit 64."""
+    hints = tuple(f"unit {i}: " + "x" * 200 for i in range(12))
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy, hints=hints)
+
+    prompt = stub_agy.calls()[0]["prompt"]
+    assert f"12. {hints[11]}" in prompt
+
+
 def test_leftover_files_make_the_handoff_incomplete(repo, granted, stub_agy, pending_file):
     pending_file("a.txt")
     pending_file("b.txt")
@@ -244,6 +332,20 @@ def test_safe_mode_stamps_the_commits_it_creates(repo, granted, stub_agy, pendin
     stamped = stub_agy.calls()[0]["author_date"][:16]
     logged = gitutil.log("HEAD", "%ad", date_format="%Y-%m-%d %H:%M", cwd=repo)
     assert logged == [stamped]
+
+
+def test_safe_mode_tells_each_unit_where_the_hints_stand(repo, granted, stub_agy, pending_file, safe_setup):
+    """Each per-unit call is a fresh agy with no memory of the previous split;
+    the prompt has to route it to the next hint via git log."""
+    pending_file("a.txt")
+    pending_file("b.txt")
+    stub_agy.mode("one")
+
+    run(COMMIT_SAFE, repo, stub_agy, hints=("feat: unit a", "feat: unit b"))
+
+    for call in stub_agy.calls():
+        assert "first hint whose work" in call["prompt"]
+        assert "1. feat: unit a" in call["prompt"]
 
 
 def test_safe_mode_constrains_agy_to_one_unit(repo, granted, stub_agy, pending_file, safe_setup):

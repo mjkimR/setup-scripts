@@ -30,6 +30,73 @@ untracked file, `git add` it and use `git diff --cached <path>`; never the
 `git add -N` … `git reset` round trip. A denial is not a reason to stop: carry on
 with git and finish the job."""
 
+# Shared grouping rules for both commit tasks. Only git is permitted, so
+# per-commit greenness is nothing the receiver could verify anyway — stating
+# that explicitly stops it from trying, or from apologizing for not trying.
+_GROUPING_RULES = """Grouping rules:
+- A file's entire change belongs to exactly one commit. Never split one file's
+  changes across commits — no partial staging. When one file carries several
+  concerns, put it whole into the commit of its dominant concern (tie-break:
+  the earliest commit that needs it) and note the piggybacked change in that
+  commit's body.
+- Intermediate commits of a multi-commit split do not need to keep tests or
+  the build green. Only the last commit must leave the tree exactly as it is
+  now. Spend no effort verifying or ordering for per-commit greenness.
+- Never run tests, builds or linters — committing is the whole job, and
+  nothing but git is permitted anyway."""
+
+# What the tests attestation authorizes the receiver to assume. The caller
+# vouches for the tree it hands off; the receiver acts on the claim without
+# repeating the work — that is the entire point of carrying it over.
+_TESTS_NOTES = {
+    "passed": (
+        "Tests: the caller ran the test suite on exactly this tree and it "
+        "passed.\n  Trust that — do not re-run, re-verify, or hedge about it."
+    ),
+    "failed": (
+        "Tests: the caller reports the test suite failing on this tree. Commit"
+        "\n  anyway; fixing tests is not your job and not a reason to hold back."
+    ),
+    "not-run": (
+        "Tests: the caller did not run tests on this tree. Do not run them"
+        "\n  either, and do not speculate about their state."
+    ),
+}
+
+
+def _caller_context(hints: tuple[str, ...], tests: str | None, *, per_unit: bool) -> str:
+    """The caller's knowledge of the work, carried into the receiver's prompt.
+
+    Hints are advisory by design: the caller writes them from memory of the
+    work, and memory can lag the tree (manual edits after the fact). The diff
+    stays the ground truth, so a mismatch degrades gracefully instead of
+    forcing padded or withheld commits.
+    """
+    if not hints and tests is None:
+        return ""
+
+    lines: list[str] = ["", "Caller context — written by the agent that did the work:"]
+    if hints:
+        lines.append("- Suggested commit units, in order:")
+        lines.extend(f"  {i}. {hint}" for i, hint in enumerate(hints, start=1))
+        lines.append(
+            "- The hints are grouping labels, not final subjects: write every\n"
+            "  commit subject yourself, following the repository conventions.\n"
+            "- The diff is the ground truth. Where the tree does not match a hint,\n"
+            "  follow the diff: never create an empty or padded commit to satisfy\n"
+            "  the hint count, never leave a change uncommitted because no hint\n"
+            "  covers it, and report the mismatch at the end."
+        )
+        if per_unit:
+            lines.append(
+                "- Earlier units of this handoff are already committed; check\n"
+                "  `git log` for their subjects and take the first hint whose work\n"
+                "  is still uncommitted."
+            )
+    if tests is not None:
+        lines.append(f"- {_TESTS_NOTES[tests]}")
+    return "\n".join(lines) + "\n"
+
 
 @dataclass(frozen=True)
 class HandoffTask:
@@ -46,7 +113,13 @@ class HandoffTask:
     # Factory producing environment variables and display label for each run.
     env_factory: Callable[[], tuple[dict[str, str], str]] | None = field(default=None, repr=False)
 
-    def prompt(self, repo_root: Path) -> str:
+    def prompt(
+        self,
+        repo_root: Path,
+        *,
+        hints: tuple[str, ...] = (),
+        tests: str | None = None,
+    ) -> str:
         repo_cfg = load_repo_config(cwd=repo_root)
         conventions_note = ""
         if repo_cfg is not None:
@@ -62,7 +135,9 @@ class HandoffTask:
             f"{self.skill}\n\n"
             f"Work only in {repo_root} — that is the repository to commit.\n\n"
             f"{_GIT_ONLY}\n\n"
-            f"{self.instructions}"
+            f"{_GROUPING_RULES}\n\n"
+            f"{self.instructions}\n"
+            f"{_caller_context(hints, tests, per_unit=self.per_unit)}"
             f"{conventions_note}"
         )
 

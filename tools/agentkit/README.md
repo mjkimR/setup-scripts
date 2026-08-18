@@ -17,6 +17,7 @@ uv tool install --editable tools/agentkit
 agentkit commit onboard|analyze|config        per-repo config, onboarding, history analysis
 agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
 agentkit handoff commit [--safe/--plain]      delegate committing to the Antigravity CLI
+                        [--hint L]... [--tests S]   advisory commit-unit labels + test attestation
 agentkit handoff work --to agy|codex --doc F  have another agent CLI continue a handoff document
 agentkit handoff prompt --doc F               print the pickup prompt for an interactive session
 agentkit handoff tasks                        what can be handed off

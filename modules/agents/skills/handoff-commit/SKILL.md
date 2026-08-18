@@ -25,7 +25,9 @@ cancels out the reason for delegating.
 
 ## Rules
 
-- Do NOT read diffs, group changes, or draft commit messages. `agy` does all of it.
+- Do NOT read diffs, group changes, or draft commit messages. `agy` does all of
+  it. The one sanctioned exception is `--hint`, written purely from what this
+  session already remembers of the work — never from new analysis.
 - Do NOT run `git add` or `git commit` yourself, before or after the handoff.
 - Do NOT decide for yourself whether to retry. A failed handoff may have
   committed part of the work, and a blind retry risks duplicate or polluted
@@ -50,6 +52,29 @@ Options worth knowing, all with sane defaults:
 - `--effort low|medium|high` — reasoning effort to ask `agy` for (default `medium`)
 - `--timeout 600s` — passed to `agy`'s own print timeout
 - `--verbose` — also print `agy`'s narration
+
+Two more options carry what only this session knows. Both are optional — skip
+them rather than doing any work to fill them in:
+
+- `--hint "<one line>"` — repeatable, one per intended commit, in order. A
+  subject-sized label for one unit of the work just done, written from memory.
+  Do not read diffs or `git status` to compose hints, and do not polish them:
+  `agy` treats them as advisory against the actual diff and writes the real
+  subjects itself, following the repo conventions. No clear picture of the
+  split? Pass no hints.
+- `--tests passed|failed|not-run` — attest the test-suite state of exactly the
+  tree being handed off, so `agy` neither runs nor speculates about tests.
+  Claim `passed` only if the suite ran after the last edit to the tree; if
+  anything changed since, or you are unsure, say `not-run`. Never launch a
+  test run just to fill this flag in.
+
+Example — work that landed as an API change plus its docs, tests green:
+
+```bash
+agentkit handoff commit --tests passed \
+  --hint "feat(api): add cursor pagination to /events" \
+  --hint "docs: document the events cursor parameters"
+```
 
 `agy`'s narration is suppressed on success by design: it restates the commit list
 the command already derived from git, padded with absolute `file://` links, and

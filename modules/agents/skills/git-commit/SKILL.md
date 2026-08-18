@@ -26,6 +26,8 @@ Configuration is maintained **per-repository** at `<git-dir>/agentkit-commit.jso
 2. **Atomic Commits (Split Logical Concerns)**:
    - Group related changes together. Never combine unrelated features, bug fixes, refactoring, dependency updates, or documentation into a single mega-commit.
    - Explicitly stage files (`git add <file1> <file2>`) belonging to each specific logical unit. Never run `git add .` indiscriminately.
+   - **A file is the smallest unit.** A file's entire change belongs to exactly one commit — never split one file's changes across commits via partial staging. When one file carries several concerns, commit it whole with its dominant concern (tie-break: the earliest commit that needs it) and note the piggybacked change in that commit's body.
+   - **Intermediate commits may be red.** In a multi-commit split, intermediate commits need not keep tests or the build green — only the final commit must reproduce the working tree as it stood at the start. Spend no effort verifying or reordering for per-commit greenness; grouping by concern wins.
    - Never commit sensitive files (`.env`, credentials), temporary files, or build artifacts (`dist/`, `build/`, `node_modules/`).
 
 3. **Direct Autonomous Execution**:
@@ -37,6 +39,8 @@ Configuration is maintained **per-repository** at `<git-dir>/agentkit-commit.jso
      - If the prompt lists specific files, stage only those.
      - If the prompt asks for exactly one atomic unit, create a single commit and stop.
      - If commit dates are already exported in the environment, do not resolve or override them.
+     - If the prompt carries caller hints (suggested commit units), use them to group and order the commits — but as advice, not instruction: the diff is the ground truth. Never create an empty or padded commit to match the hint count, never leave a change uncommitted because no hint covers it, and never reuse a hint verbatim as a subject — write subjects to the repository conventions. Report any hint/tree mismatch at the end.
+     - If the prompt attests the test-suite state (`passed` / `failed` / `not-run`), trust it: do not run tests, builds, or linters yourself. `failed` is not a reason to hold back commits, and the attestation never goes into a commit message.
      - Never stop to prompt interactively during a headless run.
 
 ---

@@ -2,7 +2,8 @@
 
 - **Date**: 2026-08-14
 - **Status**: Accepted, amended by
-  [0002](./0002-consolidate-the-commit-skill-set.md)
+  [0002](./0002-consolidate-the-commit-skill-set.md) and
+  [0004](./0004-carry-caller-context-into-the-commit-handoff.md)
 - **Verified against**: `agy` 1.1.12
 
 > **Amendment note.** Every behavioural decision below still holds. What changed
