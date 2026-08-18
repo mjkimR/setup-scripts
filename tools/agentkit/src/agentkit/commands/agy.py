@@ -7,7 +7,16 @@ import click
 from ..agy import SETTINGS_PATH, missing_rules
 from ..agy import grant as grant_rules
 from ..errors import ExitCode
-from ..handoff.tasks import COMMIT_GRANTS
+from ..handoff.polish import POLISH_GRANTS
+from ..handoff.tasks import TASKS
+
+# What the handoff tasks collectively need; the default for check and grant.
+# Aggregated from the task registry so a new task's declared grants become
+# visible here without editing this file. (The polish runner is not a
+# registry task; its grants ride along explicitly.)
+HANDOFF_GRANTS: tuple[str, ...] = tuple(
+    dict.fromkeys([rule for task in TASKS.values() for rule in task.grants] + list(POLISH_GRANTS))
+)
 
 
 @click.group()
@@ -19,9 +28,9 @@ def agy() -> None:
 @click.pass_context
 def check(ctx: click.Context) -> None:
     """Report which required grants are missing. Exits 1 if any are."""
-    missing = missing_rules(COMMIT_GRANTS)
+    missing = missing_rules(HANDOFF_GRANTS)
     if not missing:
-        click.echo("[OK] All grants required by the commit handoff are present.")
+        click.echo("[OK] All grants required by the handoff tasks are present.")
         return
 
     click.echo("[ERROR] Missing grants:", err=True)
@@ -38,18 +47,18 @@ def check(ctx: click.Context) -> None:
     "rules",
     multiple=True,
     help=(
-        "Grant this rule instead of the commit set (repeatable), e.g. "
+        "Grant this rule instead of the handoff set (repeatable), e.g. "
         "'command(uv run pytest)'. Rules are prefixes — keep them as long as "
         "the narrowest command that should pass."
     ),
 )
 def grant(yes: bool, rules: tuple[str, ...]) -> None:
-    """Grant command rules to headless agy — the commit set by default.
+    """Grant command rules to headless agy — the handoff set by default.
 
     Preferred over --dangerously-skip-permissions, which would auto-approve
     every tool call including arbitrary shell commands.
     """
-    to_grant = rules or COMMIT_GRANTS
+    to_grant = rules or HANDOFF_GRANTS
     click.echo(f"[INFO] Settings file: {SETTINGS_PATH}")
     click.echo("[INFO] Rules to grant:")
     for rule in to_grant:

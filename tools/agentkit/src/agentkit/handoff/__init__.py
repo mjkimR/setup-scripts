@@ -6,7 +6,8 @@ knows nothing about commits — only that it snapshots the world, asks, and look
 again.
 """
 
+from .polish import run_polish
 from .runner import run_handoff
 from .tasks import TASKS, HandoffTask, get_task
 
-__all__ = ["TASKS", "HandoffTask", "get_task", "run_handoff"]
+__all__ = ["TASKS", "HandoffTask", "get_task", "run_handoff", "run_polish"]

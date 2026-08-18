@@ -43,7 +43,7 @@ def pending_file(repo: Path):
 
 @pytest.fixture
 def granted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """agy settings holding every grant the commit handoff needs."""
+    """agy settings holding every grant the handoff tasks need."""
     settings = tmp_path / "settings.json"
     settings.write_text(
         json.dumps(
@@ -53,6 +53,7 @@ def granted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                         "command(git add)",
                         "command(git commit)",
                         "command(git ls-files)",
+                        "command(git diff)",
                     ]
                 }
             }

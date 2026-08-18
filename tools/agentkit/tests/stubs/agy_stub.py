@@ -10,6 +10,14 @@ according to $AGY_STUB_MODE:
           call (a per-unit run that dies mid-way)
     none  commit nothing and report a permission denial the way headless agy
           does — cleanly, on stdout, with exit code 0
+
+Polish-prompt modes, driven by the target list in the prompt:
+
+    polish          edit every target and mark each POLISHED
+    polish-clean    edit nothing, mark every target CLEAN
+    polish-partial  edit and mark the first target, stay silent on the rest
+    polish-liar     edit nothing but mark every target POLISHED
+    polish-delete   delete every target and mark each POLISHED
 """
 
 import json
@@ -28,6 +36,12 @@ def parse_args(argv):
         if token == "-p":
             parsed["prompt"] = argv[index + 1]
             index += 2
+        elif token == "--add-dir":
+            # Repeatable: keep the first (the workdir) where old tests look,
+            # and the full list for the polish tests.
+            parsed.setdefault("add_dir", argv[index + 1])
+            parsed.setdefault("add_dirs", []).append(argv[index + 1])
+            index += 2
         elif token.startswith("--"):
             parsed[token[2:].replace("-", "_")] = argv[index + 1]
             index += 2
@@ -38,6 +52,24 @@ def parse_args(argv):
 
 def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+
+
+def run_polish_mode(mode: str, prompt: str) -> int:
+    """Behave like a polish receiver: the prompt's target list drives the run."""
+    targets = re.findall(r"^- (?:changed-regions|whole-file) :: (.+)$", prompt, re.MULTILINE)
+    for index, target in enumerate(targets):
+        path = Path(target) if Path(target).is_absolute() else Path.cwd() / target
+        if mode == "polish" or (mode == "polish-partial" and index == 0):
+            path.write_text(path.read_text(encoding="utf-8") + "\npolished\n", encoding="utf-8")
+            print(f"POLISHED: {target}")
+        elif mode == "polish-clean":
+            print(f"CLEAN: {target}")
+        elif mode == "polish-liar":
+            print(f"POLISHED: {target}")
+        elif mode == "polish-delete":
+            path.unlink()
+            print(f"POLISHED: {target}")
+    return 0
 
 
 def write_completion_report(prompt: str) -> None:
@@ -56,6 +88,8 @@ def main() -> int:
                 {
                     "prompt": args.get("prompt", ""),
                     "add_dir": args.get("add_dir", ""),
+                    "add_dirs": args.get("add_dirs", []),
+                    "mode_flag": args.get("mode", ""),
                     "effort": args.get("effort", ""),
                     "model": args.get("model", ""),
                     "timeout": args.get("print_timeout", ""),
@@ -104,6 +138,9 @@ def main() -> int:
     if mode == "timeout":
         print("deadline exceeded while generating the commit")
         return 0
+
+    if mode.startswith("polish"):
+        return run_polish_mode(mode, args.get("prompt", ""))
 
     write_completion_report(args.get("prompt", ""))
 

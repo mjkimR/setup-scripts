@@ -16,6 +16,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -62,6 +63,10 @@ class AgyClient:
     effort: str | None = DEFAULT_EFFORT  # None: leave it to agy's own default
     timeout: str = DEFAULT_TIMEOUT
     model: str | None = None  # None: whatever the Antigravity CLI is configured with
+    # Execution mode, e.g. "accept-edits" to auto-approve file edits. None keeps
+    # agy's default, where a headless run soft-denies every edit. Verified
+    # against agy 1.1.12: accept-edits applies edits without prompting.
+    mode: str | None = None
     executable: str = "agy"
 
     @property
@@ -73,9 +78,14 @@ class AgyClient:
         prompt: str,
         *,
         add_dir: Path,
+        extra_dirs: Sequence[Path] = (),
         env: dict[str, str] | None = None,
     ) -> AgyRun:
         args = [self.executable, "-p", prompt, "--add-dir", str(add_dir)]
+        for extra in extra_dirs:
+            args += ["--add-dir", str(extra)]
+        if self.mode is not None:
+            args += ["--mode", self.mode]
         if self.effort is not None:
             args += ["--effort", self.effort]
         if self.model is not None:

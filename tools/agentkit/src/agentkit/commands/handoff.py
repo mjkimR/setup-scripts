@@ -10,6 +10,7 @@ from ..agy import AgyClient
 from ..agy.client import DEFAULT_EFFORT, DEFAULT_TIMEOUT
 from ..errors import ConfigError
 from ..handoff import TASKS, get_task, run_handoff
+from ..handoff.polish import run_polish
 from ..handoff.runner import DEFAULT_MAX_UNITS
 from ..handoff.work import (
     DEFAULT_TARGET,
@@ -27,16 +28,43 @@ def handoff() -> None:
     """Hand a job to `agy` and verify the outcome from git."""
 
 
-# Shape checks only: one flag is one unit is one line. Length and count are
+# Shape checks only: one flag is one item is one line. Length and count are
 # deliberately unenforced — "subject-sized" is advice to the caller about its
 # own effort, and the receiver's quota is the cheap side of the handoff.
-def _validate_hints(ctx: click.Context, param: click.Parameter, value: tuple[str, ...]) -> tuple[str, ...]:
-    for hint in value:
-        if not hint.strip():
-            raise click.BadParameter("a hint must not be empty.")
-        if "\n" in hint:
-            raise click.BadParameter(f"a hint must be a single line — pass one --hint per intended commit: {hint!r}")
-    return tuple(hint.strip() for hint in value)
+def _validate_lines(ctx: click.Context, param: click.Parameter, value: tuple[str, ...]) -> tuple[str, ...]:
+    label = (param.name or "value").rstrip("s")
+    for item in value:
+        if not item.strip():
+            raise click.BadParameter(f"a {label} must not be empty.")
+        if "\n" in item:
+            raise click.BadParameter(f"a {label} must be a single line — pass one --{label} per item: {item!r}")
+    return tuple(item.strip() for item in value)
+
+
+# The agy invocation options every headless handoff shares. One definition,
+# so defaults, envvars and help text cannot drift apart between commands.
+def _agy_client_options(func):
+    func = click.option(
+        "--verbose",
+        is_flag=True,
+        envvar="AGENTKIT_VERBOSE",
+        help="Also print agy's own narration, which is dropped on success.",
+    )(func)
+    func = click.option(
+        "--timeout",
+        default=DEFAULT_TIMEOUT,
+        envvar="AGENTKIT_AGY_TIMEOUT",
+        show_default=True,
+        help="Go duration passed to agy's --print-timeout.",
+    )(func)
+    func = click.option(
+        "--effort",
+        default=DEFAULT_EFFORT,
+        envvar="AGENTKIT_AGY_EFFORT",
+        show_default=True,
+        help="Reasoning effort to ask agy for: low, medium or high.",
+    )(func)
+    return func
 
 
 @handoff.command("commit")
@@ -45,20 +73,6 @@ def _validate_hints(ctx: click.Context, param: click.Parameter, value: tuple[str
     "safe",
     default=None,
     help="Explicitly enforce or disable timeline/whitelist safe mode. Defaults to repo config if omitted.",
-)
-@click.option(
-    "--effort",
-    default=DEFAULT_EFFORT,
-    envvar="AGENTKIT_AGY_EFFORT",
-    show_default=True,
-    help="Reasoning effort to ask agy for: low, medium or high.",
-)
-@click.option(
-    "--timeout",
-    default=DEFAULT_TIMEOUT,
-    envvar="AGENTKIT_AGY_TIMEOUT",
-    show_default=True,
-    help="Go duration passed to agy's --print-timeout.",
 )
 @click.option(
     "--max-units",
@@ -71,7 +85,7 @@ def _validate_hints(ctx: click.Context, param: click.Parameter, value: tuple[str
     "--hint",
     "hints",
     multiple=True,
-    callback=_validate_hints,
+    callback=_validate_lines,
     help=(
         "One intended commit per flag, in order: a one-line, subject-sized label "
         "written from memory of the work. Advisory — agy follows the diff where they disagree."
@@ -86,12 +100,7 @@ def _validate_hints(ctx: click.Context, param: click.Parameter, value: tuple[str
         "so agy neither runs nor speculates about tests. Omit if unknown."
     ),
 )
-@click.option(
-    "--verbose",
-    is_flag=True,
-    envvar="AGENTKIT_VERBOSE",
-    help="Also print agy's own narration, which is dropped on success.",
-)
+@_agy_client_options
 @click.pass_context
 def commit(
     ctx: click.Context,
@@ -134,6 +143,58 @@ def commit(
         verbose=verbose,
         hints=hints,
         tests=tests,
+    )
+    ctx.exit(int(result.exit_code))
+
+
+@handoff.command("polish")
+@click.argument("paths", nargs=-1, type=click.Path(path_type=Path))
+@click.option(
+    "--base",
+    default=None,
+    help=(
+        "Polish the Markdown changes since this ref instead of the uncommitted "
+        "changes vs HEAD. Only valid without explicit paths."
+    ),
+)
+@click.option(
+    "--instruction",
+    "instructions",
+    multiple=True,
+    callback=_validate_lines,
+    help=(
+        "One extra directive per flag, carried to the polisher verbatim (e.g. a tone "
+        "change). Overrides the default style rules where they conflict."
+    ),
+)
+@_agy_client_options
+@click.pass_context
+def polish(
+    ctx: click.Context,
+    paths: tuple[Path, ...],
+    base: str | None,
+    instructions: tuple[str, ...],
+    effort: str,
+    timeout: str,
+    verbose: bool,
+) -> None:
+    """Delegate copyediting the changed Markdown files to agy.
+
+    Without paths, the targets are the Markdown files changed against HEAD (or
+    --base), polished only where they changed. Explicit paths — inside the
+    repository or not — are polished whole. Edits land in the working tree,
+    never in a commit: review with `git diff`, undo with `git restore <file>`.
+
+    Exit codes: 0 polished (or every file already clean), 1 nothing was
+    polished — a refused command line included, 2 some files were polished
+    with the rest unaccounted for.
+    """
+    result = run_polish(
+        paths,
+        base=base,
+        instructions=instructions,
+        client=AgyClient(effort=effort, timeout=timeout, mode="accept-edits"),
+        verbose=verbose,
     )
     ctx.exit(int(result.exit_code))
 
