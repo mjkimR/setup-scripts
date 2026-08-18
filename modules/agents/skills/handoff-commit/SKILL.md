@@ -131,9 +131,10 @@ remaining uncommitted files.
   response, and exits 0. The runner ignores that and checks whether HEAD moved
   instead. Never treat raw `agy` output as proof that a commit happened.
 - **Permissions are required up front.** `agy` needs `command(git add)`,
-  `command(git commit)` and `command(git ls-files)`. Grant them with
-  `agentkit agy grant`; check with `agentkit agy check`. The runner refuses to
-  start without them.
+  `command(git commit)` and `command(git ls-files)`; the runner refuses to
+  start without them. Grant with `agentkit agy grant`. Note that
+  `agentkit agy check` validates the full handoff set — it may also flag
+  `command(git diff)`, which belongs to the polish handoff, not this one.
 - **Quota.** Each handoff spends Antigravity quota on a five-hour rolling limit.
   Keep it user-triggered; do not put it in a loop or on a schedule. A spent
   quota comes back as `[ACTION] DEFER` — report it and leave the retry to the

@@ -1,0 +1,7 @@
+name: polish-doc
+description: Copyedits Markdown documents into natural Korean, scoped to what changed
+
+targets:
+  - antigravity
+  # - claude   # sender side uses handoff-polish; polishing there defeats the delegation
+  # - codex
