@@ -1,6 +1,8 @@
-"""`agentkit handoff` — delegate a job to the Antigravity CLI."""
+"""`agentkit handoff` — delegate a job to another agent CLI."""
 
 from __future__ import annotations
+
+from pathlib import Path
 
 import click
 
@@ -9,6 +11,14 @@ from ..agy.client import DEFAULT_EFFORT, DEFAULT_TIMEOUT
 from ..errors import ConfigError
 from ..handoff import TASKS, get_task, run_handoff
 from ..handoff.runner import DEFAULT_MAX_UNITS
+from ..handoff.work import (
+    DEFAULT_TARGET,
+    DEFAULT_WORK_EFFORT,
+    DEFAULT_WORK_TIMEOUT,
+    TARGETS,
+    pickup_prompt,
+    run_work,
+)
 from ..repoconfig import load_repo_config
 
 
@@ -91,6 +101,78 @@ def commit(
         verbose=verbose,
     )
     ctx.exit(int(result.exit_code))
+
+
+@handoff.command("work")
+@click.option(
+    "--to",
+    type=click.Choice(TARGETS),
+    default=DEFAULT_TARGET,
+    show_default=True,
+    help="Which agent CLI continues the work.",
+)
+@click.option(
+    "--doc",
+    required=True,
+    type=click.Path(exists=False, dir_okay=False, path_type=Path),
+    help="The handoff document the receiver picks up.",
+)
+@click.option(
+    "--effort",
+    default=DEFAULT_WORK_EFFORT,
+    show_default=True,
+    help="Reasoning effort for the receiver: low, medium or high. 'default' leaves it to the receiver's own config.",
+)
+@click.option("--model", default=None, help="Model override; omitted, the receiver's own configuration decides.")
+@click.option(
+    "--timeout",
+    default=None,
+    help=(
+        "Hard lifetime cap for the receiver — it is cut off mid-work when this expires "
+        f"(e.g. 45m, 1h). [default: {DEFAULT_WORK_TIMEOUT}]"
+    ),
+)
+@click.pass_context
+def work(
+    ctx: click.Context,
+    to: str,
+    doc: Path,
+    effort: str,
+    model: str | None,
+    timeout: str | None,
+) -> None:
+    """Have another agent CLI continue the work a handoff document describes.
+
+    This runs the receiver and reports what it said; whether the work actually
+    happened is yours to verify against the document's own checks. Exit codes:
+    0 the receiver finished, 1 it failed outright, 2 it stopped part-way.
+    """
+    result = run_work(
+        doc,
+        to=to,
+        effort=None if effort == "default" else effort,
+        model=model,
+        timeout=timeout,
+    )
+    ctx.exit(int(result.exit_code))
+
+
+@handoff.command("prompt")
+@click.option(
+    "--doc",
+    required=True,
+    type=click.Path(exists=False, dir_okay=False, path_type=Path),
+    help="The handoff document the receiver picks up.",
+)
+def prompt_cmd(doc: Path) -> None:
+    """Print the paste-ready pickup prompt instead of executing.
+
+    For handoffs too long or interactive for a headless `handoff work` run:
+    paste this into an agy/codex/claude session yourself. It is the same prompt
+    `handoff work` uses, including the instruction to write a completion report
+    next to the document — so the outcome lands in a file either way.
+    """
+    click.echo(pickup_prompt(doc))
 
 
 @handoff.command("tasks")

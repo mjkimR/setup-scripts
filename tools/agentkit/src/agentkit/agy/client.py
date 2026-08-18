@@ -19,7 +19,7 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 
-DEFAULT_EFFORT = "low"
+DEFAULT_EFFORT = "medium"
 DEFAULT_TIMEOUT = "600s"
 
 _DENIED_COMMAND = re.compile(r'permission check failed for command "([^"]*)"')
@@ -59,8 +59,9 @@ class AgyRun:
 
 @dataclass
 class AgyClient:
-    effort: str = DEFAULT_EFFORT
+    effort: str | None = DEFAULT_EFFORT  # None: leave it to agy's own default
     timeout: str = DEFAULT_TIMEOUT
+    model: str | None = None  # None: whatever the Antigravity CLI is configured with
     executable: str = "agy"
 
     @property
@@ -74,18 +75,17 @@ class AgyClient:
         add_dir: Path,
         env: dict[str, str] | None = None,
     ) -> AgyRun:
+        args = [self.executable, "-p", prompt, "--add-dir", str(add_dir)]
+        if self.effort is not None:
+            args += ["--effort", self.effort]
+        if self.model is not None:
+            args += ["--model", self.model]
         # Ensure agy runs strictly within the target directory.
         with tempfile.TemporaryDirectory(prefix="agentkit-agy-") as scratch:
             log_path = Path(scratch) / "agy.log"
             process = subprocess.run(
                 [
-                    self.executable,
-                    "-p",
-                    prompt,
-                    "--add-dir",
-                    str(add_dir),
-                    "--effort",
-                    self.effort,
+                    *args,
                     "--print-timeout",
                     self.timeout,
                     "--log-file",

@@ -17,6 +17,7 @@ from .commands.commitcmd import commit_group
 from .commands.commitsafe import commit_safe
 from .commands.gitcmd import git_group
 from .commands.handoff import handoff
+from .commands.scratch import scratch
 from .errors import Actor, Advisory, AgentkitError, ErrorCode, ExitCode, Retry
 
 
@@ -70,6 +71,7 @@ cli.add_command(commit_safe)
 cli.add_command(handoff)
 cli.add_command(agy)
 cli.add_command(git_group)
+cli.add_command(scratch)
 
 
 def main() -> None:

@@ -1,0 +1,7 @@
+name: handoff
+description: Compact the current session into a portable handoff document another agent can pick up
+
+targets:
+  - claude
+  # - codex        # enable once the codex-side workflow is validated
+  # - antigravity  # receiver, not sender, in the current workflow

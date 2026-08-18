@@ -47,7 +47,7 @@ takes roughly 20–60 seconds; allow longer for large diffs.
 
 Options worth knowing, all with sane defaults:
 
-- `--effort low|medium|high` — reasoning effort to ask `agy` for (default `low`)
+- `--effort low|medium|high` — reasoning effort to ask `agy` for (default `medium`)
 - `--timeout 600s` — passed to `agy`'s own print timeout
 - `--verbose` — also print `agy`'s narration
 

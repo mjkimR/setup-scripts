@@ -33,26 +33,37 @@ def check(ctx: click.Context) -> None:
 
 @agy.command()
 @click.option("--yes", is_flag=True, help="Skip the confirmation prompt.")
-def grant(yes: bool) -> None:
-    """Grant the command rules the commit handoff needs.
+@click.option(
+    "--rule",
+    "rules",
+    multiple=True,
+    help=(
+        "Grant this rule instead of the commit set (repeatable), e.g. "
+        "'command(uv run pytest)'. Rules are prefixes — keep them as long as "
+        "the narrowest command that should pass."
+    ),
+)
+def grant(yes: bool, rules: tuple[str, ...]) -> None:
+    """Grant command rules to headless agy — the commit set by default.
 
     Preferred over --dangerously-skip-permissions, which would auto-approve
     every tool call including arbitrary shell commands.
     """
+    to_grant = rules or COMMIT_GRANTS
     click.echo(f"[INFO] Settings file: {SETTINGS_PATH}")
     click.echo("[INFO] Rules to grant:")
-    for rule in COMMIT_GRANTS:
+    for rule in to_grant:
         click.echo(f"         {rule}")
     click.echo("")
-    click.echo("[WARN] This lets ANY headless agy run stage and create commits in any")
-    click.echo("[WARN] repository you launch it from, not just the handoff skills.")
+    click.echo("[WARN] Grants apply to ANY headless agy run in any repository you")
+    click.echo("[WARN] launch it from, not just the handoff skills.")
     click.echo("")
 
     if not yes and not click.confirm("Grant these permissions?", default=False):
         click.echo("[INFO] Aborted. No changes made.")
         return
 
-    added = grant_rules(COMMIT_GRANTS)
+    added = grant_rules(to_grant)
     if added:
         click.echo(f"[INFO] Backup written to: {SETTINGS_PATH}.bak")
         click.echo("[SUCCESS] Added: " + ", ".join(added))

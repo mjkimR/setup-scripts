@@ -14,6 +14,7 @@ according to $AGY_STUB_MODE:
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -39,6 +40,13 @@ def git(*args):
     return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
 
 
+def write_completion_report(prompt: str) -> None:
+    """Cooperative modes honour a work prompt's completion-report instruction."""
+    match = re.search(r"completion report to (\S+)", prompt)
+    if match:
+        Path(match.group(1)).write_text("stub completion report\n", encoding="utf-8")
+
+
 def main() -> int:
     args = parse_args(sys.argv[1:])
 
@@ -49,6 +57,7 @@ def main() -> int:
                     "prompt": args.get("prompt", ""),
                     "add_dir": args.get("add_dir", ""),
                     "effort": args.get("effort", ""),
+                    "model": args.get("model", ""),
                     "timeout": args.get("print_timeout", ""),
                     "cwd": os.getcwd(),
                     "author_date": os.environ.get("GIT_AUTHOR_DATE", ""),
@@ -92,6 +101,8 @@ def main() -> int:
     if mode == "timeout":
         print("deadline exceeded while generating the commit")
         return 0
+
+    write_completion_report(args.get("prompt", ""))
 
     pending = [line[3:] for line in git("status", "--porcelain").splitlines()]
     if mode == "one":

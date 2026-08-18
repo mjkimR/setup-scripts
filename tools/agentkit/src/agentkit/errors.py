@@ -56,6 +56,10 @@ class ErrorCode(str, Enum):
     AGY_PERMISSION_DENIED = "AGY_PERMISSION_DENIED"
     AGY_UNAUTHENTICATED = "AGY_UNAUTHENTICATED"
     AGY_TIMEOUT = "AGY_TIMEOUT"
+    CODEX_NOT_INSTALLED = "CODEX_NOT_INSTALLED"
+    CODEX_TIMEOUT = "CODEX_TIMEOUT"
+    CODEX_FAILED = "CODEX_FAILED"
+    NO_COMPLETION_REPORT = "NO_COMPLETION_REPORT"
     QUOTA_EXHAUSTED = "QUOTA_EXHAUSTED"
     PARTIAL_COMMITS = "PARTIAL_COMMITS"
     NO_COMMITS_CREATED = "NO_COMMITS_CREATED"
@@ -278,6 +282,12 @@ class AgyNotInstalledError(PreflightError):
     code = ErrorCode.AGY_NOT_INSTALLED
     actor = Actor.USER
     retry = Retry.AFTER_FIX
+
+
+class CodexNotInstalledError(PreflightError):
+    """The Codex CLI is not available."""
+
+    code = ErrorCode.CODEX_NOT_INSTALLED
 
 
 class AgyPermissionError(PreflightError):
