@@ -10,6 +10,10 @@ from __future__ import annotations
 import sys
 from collections.abc import Iterable
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from .errors import Advisory
 
 
 @dataclass
@@ -21,6 +25,11 @@ class Reporter:
 
     def warn(self, message: str) -> None:
         print(f"[{self.tag}] {message}", file=sys.stderr)
+
+    def advise(self, advisory: Advisory, message: str | None = None) -> None:
+        """Print an advisory block for operations that report instead of raising."""
+        for line in advisory.lines(message):
+            self.warn(line)
 
     def error(self, message: str) -> None:
         print(f"[{self.tag}] ERROR: {message}", file=sys.stderr)

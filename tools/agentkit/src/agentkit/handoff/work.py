@@ -147,11 +147,6 @@ def _check_available(client: AgyClient | CodexClient) -> None:
     )
 
 
-def _advise(out: Reporter, advisory: Advisory, message: str) -> None:
-    for line in advisory.lines(message):
-        out.warn(line)
-
-
 def _finish(receiver: str, doc: Path, out: Reporter, output: str) -> WorkResult:
     """The completion report is the outcome signal — no report, no OK.
 
@@ -164,8 +159,7 @@ def _finish(receiver: str, doc: Path, out: Reporter, output: str) -> WorkResult:
         out.note(f"{receiver} finished. Verify the outcome against the handoff document's checks.")
         return WorkResult(ExitCode.OK, output)
 
-    _advise(
-        out,
+    out.advise(
         Advisory(
             code=ErrorCode.NO_COMPLETION_REPORT,
             actor=Actor.NONE,
@@ -187,8 +181,7 @@ def _run_codex(client: CodexClient, doc: Path, workdir: Path, out: Reporter) -> 
     out.block("codex output", run.output)
 
     if run.timed_out:
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.CODEX_TIMEOUT,
                 actor=Actor.NONE,
@@ -204,8 +197,7 @@ def _run_codex(client: CodexClient, doc: Path, workdir: Path, out: Reporter) -> 
         return WorkResult(ExitCode.INCOMPLETE, run.output)
 
     if run.exit_code != 0:
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.CODEX_FAILED,
                 actor=Actor.NONE,
@@ -230,8 +222,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
     # agy's exit code carries no signal (see agy/client.py); read the markers.
     if run.hit_permission_wall:
         denied = tuple(f"Denied: {cmd}" for cmd in run.denied_commands() or ["(agy's log named none)"])
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.AGY_PERMISSION_DENIED,
                 actor=Actor.USER,
@@ -247,8 +238,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
         )
         return WorkResult(ExitCode.INCOMPLETE, run.output)
     if run.looks_quota_limited:
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.QUOTA_EXHAUSTED,
                 actor=Actor.NONE,
@@ -261,8 +251,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
         )
         return WorkResult(ExitCode.INCOMPLETE, run.output)
     if run.looks_unauthenticated:
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.AGY_UNAUTHENTICATED,
                 actor=Actor.USER,
@@ -274,8 +263,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
         )
         return WorkResult(ExitCode.FAILED, run.output)
     if run.looks_timed_out:
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.AGY_TIMEOUT,
                 actor=Actor.NONE,

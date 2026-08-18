@@ -19,6 +19,7 @@ from pathlib import Path
 
 from .. import gitutil
 from ..agy import AgyClient, AgyRun, missing_rules
+from ..agy.diagnose import FailureTexts, diagnose_failure
 from ..commitsafe import checked_identity
 from ..errors import (
     Actor,
@@ -35,12 +36,6 @@ from ..ui import Reporter
 from .tasks import HandoffTask
 
 DEFAULT_MAX_UNITS = 10
-
-
-def _advise(out: Reporter, advisory: Advisory, message: str | None = None) -> None:
-    """Print an advisory block for operations that report instead of raising."""
-    for line in advisory.lines(message):
-        out.warn(line)
 
 
 @dataclass
@@ -98,8 +93,7 @@ def run_handoff(
         result.units += 1
         if task.per_unit and result.units > max_units:
             result.remaining = gitutil.pending(cwd=root)
-            _advise(
-                out,
+            out.advise(
                 Advisory(
                     code=ErrorCode.MAX_UNITS_EXCEEDED,
                     actor=Actor.USER,
@@ -161,8 +155,7 @@ def run_handoff(
         # agy gave for stopping short is worth the tokens here.
         if not verbose:
             out.block("agy output", run.output)
-        _advise(
-            out,
+        out.advise(
             Advisory(
                 code=ErrorCode.PARTIAL_COMMITS,
                 actor=Actor.NONE,
@@ -192,15 +185,6 @@ def run_handoff(
     else:
         out.note("Working tree is clean.")
     return result
-
-
-def _outside_task_scope(denied: list[str], task: HandoffTask) -> list[str]:
-    """The denied commands the task's own prompt never authorizes."""
-
-    def permitted(cmd: str) -> bool:
-        return any(cmd == prefix or cmd.startswith(prefix + " ") for prefix in task.permitted)
-
-    return [cmd for cmd in denied if not permitted(cmd)]
 
 
 def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Path:
@@ -271,88 +255,28 @@ def _report_nothing_happened(
     else:
         left = "The working tree was left untouched."
 
-    # Determine retry safety based on whether prior units already committed.
-    after_fix = Retry.UNSAFE if result.commits else Retry.AFTER_FIX
-    wait_it_out = Retry.UNSAFE if result.commits else Retry.SAFE
-
-    if run.hit_permission_wall:
-        denied_commands = run.denied_commands()
-        out_of_scope = _outside_task_scope(denied_commands, task)
-        if out_of_scope:
-            # `agentkit agy grant` cannot help here: the denied command is one
-            # this task never authorizes, so the prompt steered agy somewhere
-            # the allow-list is *supposed* to block. Suggesting the grant fix
-            # sends the user into a retry loop against the same wall.
-            cause = "agy reached for a command outside the task's permitted set."
-            advisory = Advisory(
-                code=ErrorCode.AGY_PERMISSION_DENIED,
-                actor=Actor.TOOL,
-                retry=Retry.UNSAFE,
-                what_to_report=(
-                    "agy was denied a command this task never permits — granting more permissions is "
-                    "not the fix. This is a bug in the handoff prompt; report it, including the "
-                    "denied command below."
-                ),
-                details=(
-                    *(f"Out of scope: {cmd}" for cmd in out_of_scope),
-                    left,
-                    "No retry was attempted.",
-                ),
-            )
-        else:
-            denied = tuple(f"Denied: {cmd}" for cmd in denied_commands or ["(agy's log named none)"])
-            cause = "a command was auto-denied for lack of permission."
-            advisory = Advisory(
-                code=ErrorCode.AGY_PERMISSION_DENIED,
-                actor=Actor.TOOL,
-                retry=after_fix,
-                fix="agentkit agy grant",
-                what_to_report="agy execution permission was denied; no commits were created.",
-                details=(*denied, left, "No retry was attempted."),
-            )
-    elif run.looks_quota_limited:
-        # Before the auth check: a spent-quota message routinely says "token".
-        cause = "agy reported a usage limit."
-        advisory = Advisory(
-            code=ErrorCode.QUOTA_EXHAUSTED,
-            actor=Actor.NONE,
-            retry=wait_it_out,
-            retry_after="the Antigravity rolling quota window resets (up to 5h)",
-            what_to_report="Antigravity quota is exhausted; no commits were created. It will reset over time.",
-            details=("Nothing is misconfigured — the limit is time-based.", left, "No retry was attempted."),
-        )
-    elif run.looks_unauthenticated:
-        cause = "looks like an authentication failure."
-        advisory = Advisory(
-            code=ErrorCode.AGY_UNAUTHENTICATED,
-            actor=Actor.USER,
-            retry=after_fix,
-            what_to_report="agy authentication appears to have expired; please refresh the login.",
-            details=("Run `agy` interactively once to refresh the login.", left, "No retry was attempted."),
-        )
-    elif run.looks_timed_out:
-        # Last of the recognizers: "timed out" is the phrase most likely to turn
-        # up inside a message whose real cause is one of the ones above.
-        cause = "agy timed out before it committed."
-        advisory = Advisory(
-            code=ErrorCode.AGY_TIMEOUT,
-            actor=Actor.NONE,
-            retry=wait_it_out,
-            what_to_report="agy timed out before completing. If the changes are too large, split them and try again.",
-            details=(
-                "A larger --timeout, or a smaller change set, is the usual answer.",
-                left,
-                "No retry was attempted.",
-            ),
-        )
-    else:
-        cause = "agy gave no recognizable reason."
-        advisory = Advisory(
+    texts = FailureTexts(
+        nothing_happened="no commits were created",
+        timeout_cause="agy timed out before it committed.",
+        timeout_report="agy timed out before completing. If the changes are too large, split them and try again.",
+        timeout_hint="A larger --timeout, or a smaller change set, is the usual answer.",
+        unknown_cause="agy gave no recognizable reason.",
+        unknown=Advisory(
             code=ErrorCode.NO_COMMITS_CREATED,
             actor=Actor.NONE,
             retry=Retry.UNSAFE,
             what_to_report="agy failed to create commits. See the agy output above for the cause.",
             details=("See the agy output above for the cause.", left, "No retry was attempted."),
-        )
-
-    _advise(out, advisory, cause)
+        ),
+    )
+    # Once prior units have committed, no cause may stay retryable — acting on
+    # it means re-running a handoff that already changed the repository.
+    cause, advisory = diagnose_failure(
+        run,
+        permitted=task.permitted,
+        texts=texts,
+        left=left,
+        after_fix=Retry.UNSAFE if result.commits else Retry.AFTER_FIX,
+        wait_it_out=Retry.UNSAFE if result.commits else Retry.SAFE,
+    )
+    out.advise(advisory, cause)
