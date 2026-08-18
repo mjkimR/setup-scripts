@@ -55,7 +55,7 @@ Before running the script, you can adjust the configs inside the `config/` direc
 
 ---
 
-## Commit Skills
+## Handoff Skills
 
 `modules/agents/skills/install.sh` symlinks each skill into the agents its
 `meta.yaml` names, and installs the CLIs those skills depend on.
@@ -65,12 +65,17 @@ Before running the script, you can adjust the configs inside the `config/` direc
 | `git-commit` | Antigravity | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls. |
 | `git-commit-revise` | Antigravity | Review, critique, and propose revisions for commit messages or amend latest commits. |
 | `handoff-commit` | Claude Code, Codex | Delegates commit workflow to Antigravity CLI (`agy`), automatically respecting repository config. |
+| `polish-doc` | Antigravity | Copyedits Markdown prose into natural Korean, scoped to the changed regions; protects code, links, and structure. |
+| `handoff-polish` | Claude Code, Codex | Delegates Korean copyediting of changed Markdown to `agy`; edits land in the working tree, staged pre-polish state makes `git restore` the undo. |
 
-The point of the handoff is that Claude Code and Codex sessions usually run at
-high reasoning effort, which commit messages do not need. `agy` is cheaper and
-faster, and commit quality tolerates it. The runner verifies the outcome against
-git rather than trusting `agy`'s exit code — headless `agy` reports success even
-when every tool call was denied.
+The point of the commit handoff is that Claude Code and Codex sessions usually
+run at high reasoning effort, which commit messages do not need. `agy` is
+cheaper and faster, and commit quality tolerates it. The polish handoff exists
+for a different reason: Korean prose drafted by an English-aligned session
+reads as translationese, and the same alignment that produced it cannot judge
+it — the copyedit has to come from outside. Either way the runner verifies the
+outcome against the world (git, file hashes) rather than trusting `agy`'s exit
+code — headless `agy` reports success even when every tool call was denied.
 
 **The skills are documentation.** Everything they need to *do* lives in
 `tools/agentkit/`, a `uv` tool installed alongside them, because a `PATH` command
@@ -81,14 +86,16 @@ agentkit commit onboard            # initialize repository commit config from gi
 agentkit commit analyze            # inspect detected language, author, and conventions
 agentkit commit config             # show or edit repository commit config
 agentkit commit-safe verify        # whitelist + timestamp pre-flight
-agentkit handoff commit [--safe]   # what the handoff skills run
+agentkit handoff commit [--safe]   # what the commit handoff skills run
+agentkit handoff polish [paths…]   # what the polish handoff skill runs
 agentkit agy check | agy grant     # the allow-list headless agy needs
 agentkit git summary               # working tree overview
 ```
 
 `agy` needs `command(git add)`, `command(git commit)` and `command(git ls-files)`
-before the first handoff; `agentkit agy grant` adds them and the runner refuses
-to start without them.
+before the first commit handoff — its runner refuses to start without them —
+and `command(git diff)` for polish runs that scope to a diff (explicit
+whole-file runs need no git grant). `agentkit agy grant` adds the full set.
 
 For `--safe`, the first commit of a day lands on a random point inside the
 configured window; later commits advance by the real time that actually passed,
