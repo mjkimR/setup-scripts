@@ -88,10 +88,14 @@ def _caller_context(hints: tuple[str, ...], tests: str | None, *, per_unit: bool
             "  covers it, and report the mismatch at the end."
         )
         if per_unit:
+            # Name the exact permitted command: told merely to "check git log",
+            # the receiver reaches for `git show` — which is denied — to see
+            # what earlier commits covered, and stalls the whole unit on it.
             lines.append(
-                "- Earlier units of this handoff are already committed; check\n"
-                "  `git log` for their subjects and take the first hint whose work\n"
-                "  is still uncommitted."
+                "- Earlier units of this handoff are already committed. See what they\n"
+                "  covered with `git log --oneline --name-only -20` — use exactly that\n"
+                "  command (`git show` is denied) — then take the first hint whose\n"
+                "  work is still uncommitted."
             )
     if tests is not None:
         lines.append(f"- {_TESTS_NOTES[tests]}")

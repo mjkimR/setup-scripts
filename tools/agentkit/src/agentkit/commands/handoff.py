@@ -30,16 +30,12 @@ def handoff() -> None:
 # Shape checks only: one flag is one unit is one line. Length and count are
 # deliberately unenforced — "subject-sized" is advice to the caller about its
 # own effort, and the receiver's quota is the cheap side of the handoff.
-def _validate_hints(
-    ctx: click.Context, param: click.Parameter, value: tuple[str, ...]
-) -> tuple[str, ...]:
+def _validate_hints(ctx: click.Context, param: click.Parameter, value: tuple[str, ...]) -> tuple[str, ...]:
     for hint in value:
         if not hint.strip():
             raise click.BadParameter("a hint must not be empty.")
         if "\n" in hint:
-            raise click.BadParameter(
-                f"a hint must be a single line — pass one --hint per intended commit: {hint!r}"
-            )
+            raise click.BadParameter(f"a hint must be a single line — pass one --hint per intended commit: {hint!r}")
     return tuple(hint.strip() for hint in value)
 
 

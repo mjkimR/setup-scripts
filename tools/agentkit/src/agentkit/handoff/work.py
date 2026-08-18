@@ -117,9 +117,7 @@ def run_work(
     return _run_agy(client, doc, workdir, out)
 
 
-def _build_client(
-    to: str, *, effort: str | None, model: str | None, timeout: str | None
-) -> AgyClient | CodexClient:
+def _build_client(to: str, *, effort: str | None, model: str | None, timeout: str | None) -> AgyClient | CodexClient:
     if to == "agy":
         client = AgyClient(effort=effort, model=model)
     elif to == "codex":

@@ -404,7 +404,9 @@ def test_safe_mode_stamps_the_commits_it_creates(repo, granted, stub_agy, pendin
 
 def test_safe_mode_tells_each_unit_where_the_hints_stand(repo, granted, stub_agy, pending_file, safe_setup):
     """Each per-unit call is a fresh agy with no memory of the previous split;
-    the prompt has to route it to the next hint via git log."""
+    the prompt has to route it to the next hint via git log — naming the exact
+    permitted command, because "check git log" alone sent agy to the denied
+    `git show` and stalled the unit (seen live, 2026-08-18)."""
     pending_file("a.txt")
     pending_file("b.txt")
     stub_agy.mode("one")
@@ -412,7 +414,9 @@ def test_safe_mode_tells_each_unit_where_the_hints_stand(repo, granted, stub_agy
     run(COMMIT_SAFE, repo, stub_agy, hints=("feat: unit a", "feat: unit b"))
 
     for call in stub_agy.calls():
-        assert "first hint whose work" in call["prompt"]
+        assert "first hint whose\n  work" in call["prompt"]
+        assert "git log --oneline --name-only -20" in call["prompt"]
+        assert "`git show` is denied" in call["prompt"]
         assert "1. feat: unit a" in call["prompt"]
 
 
