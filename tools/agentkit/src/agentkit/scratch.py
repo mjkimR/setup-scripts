@@ -13,6 +13,7 @@ without onboarding; `onboard` exists to override it.
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -203,9 +204,7 @@ def resolve_scratch(cwd: Path | None = None, subdir: str | None = None) -> Scrat
             config.mechanism = mechanism
             save_scratch_config(config, cwd=repo_root)
         root = repo_root / root_rel
-        resolution = ScratchResolution(
-            path=root, root=root, in_repo=True, onboarded=onboarded, mechanism=mechanism
-        )
+        resolution = ScratchResolution(path=root, root=root, in_repo=True, onboarded=onboarded, mechanism=mechanism)
 
     if subdir:
         resolution.path = resolution.root / validate_relative_dir(subdir, what="subdir")
@@ -245,16 +244,12 @@ def clean_scratch(
             if stat.st_mtime <= cutoff:
                 affected.append(file_path)
                 if delete:
-                    try:
+                    with contextlib.suppress(OSError):
                         file_path.unlink()
-                    except OSError:
-                        pass
 
         if delete and dirpath.resolve() != root.resolve():
-            try:
+            with contextlib.suppress(OSError):
                 dirpath.rmdir()
-            except OSError:
-                pass
 
     affected.sort()
     return affected

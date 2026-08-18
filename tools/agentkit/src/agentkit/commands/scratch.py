@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import click
 
+from .. import gitutil
 from ..scratch import (
     DEFAULT_CLEAN_OLDER_THAN,
     DEFAULT_ROOT,
@@ -17,7 +18,6 @@ from ..scratch import (
     save_scratch_config,
     validate_relative_dir,
 )
-from .. import gitutil
 
 
 @click.group()
