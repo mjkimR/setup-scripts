@@ -1,6 +1,11 @@
 """Per-repository commit configuration and history analysis.
 
-Stored per-repository at `<git-dir>/agentkit-commit.json`.
+Stored per-repository at `<git-dir>/agentkit-commit.json`, with the polish
+handoff's path→어체 map alongside it at `<git-dir>/agentkit-polish.json`.
+The two are separate files on purpose: the commit config is created by
+onboarding and carries a schema version, while polishing works in any
+repository, onboarded or not, and must not start demanding onboarding to
+honor a level map.
 """
 
 from __future__ import annotations
@@ -103,6 +108,103 @@ def ensure_supported_hooks_policy(policy: str) -> None:
             ),
             details=["The option is reserved on purpose — choosing it must fail loudly, not silently degrade."],
         )
+
+
+POLISH_CONFIG_NAME = "agentkit-polish.json"
+
+
+@dataclass(frozen=True)
+class PolishConfig:
+    """Path→어체 level map for `agentkit handoff polish`.
+
+    Patterns are matched in file order and the first hit wins, so the specific
+    ones go first. Last-match-wins was the alternative; first-match reads the
+    way people write these lists — narrow rule at the top, catch-all below.
+    """
+
+    path: Path | None = None  # None when the repository has no map
+    levels: dict[str, int] = field(default_factory=dict)
+
+    def level_for(self, display: str) -> int | None:
+        for pattern, level in self.levels.items():
+            if _glob_matches(pattern, display):
+                return level
+        return None
+
+
+def _glob_matches(pattern: str, display: str) -> bool:
+    """gitignore-flavored matching: `**` crosses separators, `*` does not, and
+    a pattern with no separator is matched against the basename."""
+    subject = display if "/" in pattern else display.rsplit("/", 1)[-1]
+    return re.fullmatch(_glob_to_regex(pattern), subject) is not None
+
+
+def _glob_to_regex(pattern: str) -> str:
+    out, index = [], 0
+    while index < len(pattern):
+        char = pattern[index]
+        if pattern.startswith("**", index):
+            out.append(".*")
+            index += 2
+        elif char == "*":
+            out.append("[^/]*")
+            index += 1
+        elif char == "?":
+            out.append("[^/]")
+            index += 1
+        else:
+            out.append(re.escape(char))
+            index += 1
+    return "".join(out)
+
+
+def polish_config_path(cwd: Path | None = None) -> Path:
+    return git_dir(cwd=cwd) / POLISH_CONFIG_NAME
+
+
+def load_polish_config(cwd: Path | None = None, *, valid_levels: tuple[int, ...] | None = None) -> PolishConfig:
+    """Read the level map, or an empty one. Absent is normal; broken is not."""
+    try:
+        path = polish_config_path(cwd=cwd)
+    except Exception:
+        return PolishConfig()
+    if not path.is_file():
+        return PolishConfig()
+
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError) as error:
+        raise ConfigError(
+            f"failed to read polish config at {path}: {error}",
+            what_to_report="The repository's polish level map is unreadable; nothing was polished.",
+            details=[f"Fix the JSON syntax in {path}, or delete the file to fall back to the default 어체."],
+        ) from error
+
+    raw = data.get("levels", {}) if isinstance(data, dict) else {}
+    if not isinstance(raw, dict):
+        raise ConfigError(
+            f"polish config at {path} has a non-object 'levels'.",
+            what_to_report="The repository's polish level map is malformed; nothing was polished.",
+            details=['Expected {"levels": {"<glob>": <level>, …}}.'],
+        )
+
+    levels: dict[str, int] = {}
+    for pattern, level in raw.items():
+        # bool is an int subclass, and `true` here is a typo, not a level.
+        if not isinstance(level, int) or isinstance(level, bool):
+            raise ConfigError(
+                f"polish config at {path} maps {pattern!r} to {level!r}, which is not a level.",
+                what_to_report="The repository's polish level map has a non-numeric level; nothing was polished.",
+                details=["Levels are integers; see `agentkit handoff polish --list-levels`."],
+            )
+        if valid_levels is not None and level not in valid_levels:
+            raise ConfigError(
+                f"polish config at {path} maps {pattern!r} to level {level}, which does not exist.",
+                what_to_report=f"The repository's polish level map names level {level}; nothing was polished.",
+                details=[f"Levels installed: {', '.join(str(item) for item in valid_levels)}."],
+            )
+        levels[pattern] = level
+    return PolishConfig(path=path, levels=levels)
 
 
 CURRENT_CONFIG_VERSION = 1

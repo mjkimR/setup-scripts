@@ -1,5 +1,5 @@
 name: polish-doc
-description: Copyedits Markdown documents into natural Korean, scoped to what changed
+description: Copyedits Markdown documents into natural Korean at a chosen 어체, scoped to what changed
 
 targets:
   - antigravity

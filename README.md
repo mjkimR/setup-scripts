@@ -65,7 +65,7 @@ Before running the script, you can adjust the configs inside the `config/` direc
 | `git-commit` | Antigravity | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls. |
 | `git-commit-revise` | Antigravity | Review, critique, and propose revisions for commit messages or amend latest commits. |
 | `handoff-commit` | Claude Code, Codex | Delegates commit workflow to Antigravity CLI (`agy`), automatically respecting repository config. |
-| `polish-doc` | Antigravity | Copyedits Markdown prose into natural Korean, scoped to the changed regions; protects code, links, and structure. |
+| `polish-doc` | Antigravity | Copyedits Markdown prose into natural Korean at a chosen 어체, scoped to the changed regions; protects code, links, and structure. |
 | `handoff-polish` | Claude Code, Codex | Delegates Korean copyediting of changed Markdown to `agy`; edits land in the working tree, staged pre-polish state makes `git restore` the undo. |
 
 The point of the commit handoff is that Claude Code and Codex sessions usually
@@ -88,9 +88,28 @@ agentkit commit config             # show or edit repository commit config
 agentkit commit-safe verify        # whitelist + timestamp pre-flight
 agentkit handoff commit [--safe]   # what the commit handoff skills run
 agentkit handoff polish [paths…]   # what the polish handoff skill runs
+agentkit handoff polish --list-levels   # the 어체 ladder, L1 개조식 … L5 해요체
 agentkit agy check | agy grant     # the allow-list headless agy needs
 agentkit git summary               # working tree overview
 ```
+
+The 어체 a polish run writes in comes from `--level`, one discrete style pack
+per rung — L1 개조식, L2 해라체, L3 담백한 합니다체 (default), L4 합니다체(완곡),
+L5 해요체 — and `--language` picks the pack set while filtering the targets to
+match, so an English-only document in the sweep never spends quota. The packs
+live in `modules/agents/skills/polish-doc/references/style/<language>/` and
+ship with the skill.
+
+Without `--level`, a repository can map paths to levels in
+`<git-dir>/agentkit-polish.json`, and one run then polishes each file at its
+own 어체:
+
+```json
+{"levels": {"docs/decisions/**": 2, "*.md": 3}}
+```
+
+Patterns match gitignore-style (`**` crosses directories, a bare pattern
+matches the basename) and the first hit wins, so specific rules go first.
 
 `agy` needs `command(git add)`, `command(git commit)` and `command(git ls-files)`
 before the first commit handoff — its runner refuses to start without them —

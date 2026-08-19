@@ -3,7 +3,7 @@ name: polish-doc
 description: >-
   Use this skill to copyedit Markdown documents into natural Korean. Invoked
   headlessly through `agentkit handoff polish`, which supplies the target
-  files, their scope, and any caller instructions.
+  files, their scope, the 어체 style pack, and any caller instructions.
 ---
 
 # Polish Doc
@@ -52,8 +52,10 @@ Prose only. A "more natural" rewrite of a command name is a defect.
 - 접속부사를 직역하지 않는다. Additionally → "추가적으로" 말고 그냥 문장을 잇는다.
   However → "그러나"보다 "다만/근데". Therefore → "따라서"보다 "그래서".
 - 한 문장에 관형절을 두 개 이상 쌓지 않는다. 끊어 쓴다.
-- 담백한 합니다체. "~하시기 바랍니다", "~해 주시길 부탁드립니다"는 쓰지 않는다.
 - 기술 용어는 억지로 번역하지 않는다. 커밋, 브랜치, 마이그레이션, 캐시, 타임아웃, 롤백은 그대로 쓴다.
+
+These rules hold at every 어체. The endings below are shown in the default
+register (L3); the style pack decides how a sentence actually ends.
 
 교정 예시:
 
@@ -72,19 +74,50 @@ Correct what reads unnaturally; keep what already reads well. A document that
 needs nothing is a legitimate outcome — mark it CLEAN rather than inventing
 changes to justify the run.
 
+## 어체 — the style pack
+
+Register is not a rule in this file; it arrives with the job. The prompt
+lists every target under the pack it gets — `[L2 해라체 (평서형)]` — and then
+carries those packs in full, each naming the 종결어미 to use, the phrasings to
+avoid, how much 부연 is allowed, and the ❌/✅ pairs for that level. Follow the
+pack for each file exactly.
+
+One run can carry several packs, because a repository can map different paths
+to different levels — an ADR at L2 while a README stays at L3. Read the group
+headings before editing; do not assume one register for the whole run.
+
+The ladder runs from L1 개조식 to L5 해요체, and the packs live in
+`references/style/<language>/` in this skill directory. **A prompt with no
+pack means Korean L3: read `references/style/ko/L3.md` and work from it.**
+Never mix two levels in one document, and never invent a level between two
+rungs.
+
+Precedence, highest first:
+
+1. Protected content — never overridden except by an instruction that names
+   the exception explicitly.
+2. Caller instructions, when the prompt carries them.
+3. The style pack.
+4. The default rules in this file.
+
 ## Caller instructions
 
-The prompt may carry caller instructions (a tone change, a different 어체, a
-terminology preference). They override these style rules where the two
-conflict, and they can widen the job beyond default copyediting. The
-protected-content rules above still hold unless an instruction names the
-exception explicitly.
+The prompt may carry caller instructions (a terminology preference, an
+audience note, a specific exception). They outrank the style pack and these
+default rules where they conflict, and they can widen the job beyond
+copyediting.
 
-## Non-Korean prose
+## The language filter
 
-The default job is Korean. Leave non-Korean prose untouched — a fully
-English document is CLEAN, not a translation request — unless a caller
-instruction says otherwise.
+The style pack names the language it polishes, and the prompt states it as a
+rule. That language is the whole job: prose in any other language stays
+byte-identical, and a target with none of the target language in it is CLEAN,
+not a translation request. A Korean run leaves an English paragraph exactly
+where it is, and vice versa.
+
+Mixed documents are the normal case, not an exception — polish the parts in
+the target language and leave the rest alone. A caller instruction can widen
+this, but nothing else can.
 
 ## Completion contract
 
@@ -97,6 +130,14 @@ POLISHED: <file>   (the file was changed)
 CLEAN: <file>      (nothing needed changing)
 ```
 
+Then one more line per target file, naming the 어체 you applied to it:
+
+```
+STYLE: <file> L3
+```
+
 The caller verifies outcomes by hashing the files, so an unmarked or
 mislabeled file is treated as a failed run — the marks must match what was
-actually done.
+actually done. Hashes cannot see register, which is what the STYLE lines are
+for: report the pack you actually worked from for each file, never the one
+you assume was wanted.

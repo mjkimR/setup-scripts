@@ -18,6 +18,8 @@ Polish-prompt modes, driven by the target list in the prompt:
     polish-partial  edit and mark the first target, stay silent on the rest
     polish-liar     edit nothing but mark every target POLISHED
     polish-delete   delete every target and mark each POLISHED
+    polish-wrong-style  edit and mark every target, but acknowledge another 어체
+    polish-no-style     edit and mark every target, but skip the STYLE line
 """
 
 import json
@@ -59,7 +61,7 @@ def run_polish_mode(mode: str, prompt: str) -> int:
     targets = re.findall(r"^- (?:changed-regions|whole-file) :: (.+)$", prompt, re.MULTILINE)
     for index, target in enumerate(targets):
         path = Path(target) if Path(target).is_absolute() else Path.cwd() / target
-        if mode == "polish" or (mode == "polish-partial" and index == 0):
+        if mode in ("polish", "polish-wrong-style", "polish-no-style") or (mode == "polish-partial" and index == 0):
             path.write_text(path.read_text(encoding="utf-8") + "\npolished\n", encoding="utf-8")
             print(f"POLISHED: {target}")
         elif mode == "polish-clean":
@@ -69,7 +71,29 @@ def run_polish_mode(mode: str, prompt: str) -> int:
         elif mode == "polish-delete":
             path.unlink()
             print(f"POLISHED: {target}")
+
+    # A cooperative receiver echoes back the 어체 each target was handed. The
+    # prompt groups targets under a `[L2 해라체 (평서형)]` heading per pack.
+    if mode != "polish-no-style":
+        for target, level in style_groups(prompt).items():
+            if mode == "polish-wrong-style":
+                level = "L1" if level != "L1" else "L5"
+            print(f"STYLE: {target} {level}")
     return 0
+
+
+def style_groups(prompt: str) -> dict:
+    """Map each target in the prompt to the level of the group it sits under."""
+    assigned, level = {}, None
+    for line in prompt.splitlines():
+        heading = re.match(r"^\[(L\d) ", line)
+        if heading:
+            level = heading.group(1)
+            continue
+        target = re.match(r"^- (?:changed-regions|whole-file) :: (.+)$", line)
+        if target and level:
+            assigned[target.group(1)] = level
+    return assigned
 
 
 def write_completion_report(prompt: str) -> None:

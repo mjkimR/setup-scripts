@@ -284,3 +284,60 @@ def test_run_all_hooks_policy_is_refused_everywhere(repo: Path, monkeypatch) -> 
     assert loaded.hooks.policy == "bypass-intermediate"
     assert loaded.verify.test == "uv run pytest -q"
     assert loaded.verify.lint == "ruff check"
+
+
+def test_the_polish_level_map_is_optional(repo: Path) -> None:
+    """Polishing works in any repository, onboarded or not, so an absent map
+    is the normal case and must not raise."""
+    from agentkit.repoconfig import load_polish_config
+
+    config = load_polish_config(cwd=repo)
+
+    assert config.levels == {}
+    assert config.level_for("README.md") is None
+
+
+def test_the_polish_level_map_matches_paths_gitignore_style(repo: Path) -> None:
+    import json
+
+    from agentkit.repoconfig import load_polish_config, polish_config_path
+
+    polish_config_path(cwd=repo).write_text(
+        json.dumps({"levels": {"docs/decisions/**": 2, "docs/*": 5, "*.md": 3}}),
+        encoding="utf-8",
+    )
+    config = load_polish_config(cwd=repo)
+
+    assert config.level_for("docs/decisions/0001-x.md") == 2  # ** crosses separators
+    assert config.level_for("docs/guide.md") == 5  # * stops at one
+    assert config.level_for("docs/nested/guide.md") == 3  # so this falls through
+    assert config.level_for("README.md") == 3  # a bare pattern matches the basename
+    assert config.level_for("notes.txt") is None
+
+
+def test_a_polish_level_map_with_a_bad_value_is_refused(repo: Path) -> None:
+    import json
+
+    import pytest
+
+    from agentkit.errors import ConfigError
+    from agentkit.repoconfig import load_polish_config, polish_config_path
+
+    polish_config_path(cwd=repo).write_text(json.dumps({"levels": {"*.md": "two"}}), encoding="utf-8")
+
+    with pytest.raises(ConfigError):
+        load_polish_config(cwd=repo)
+
+
+def test_a_polish_level_map_is_checked_against_the_installed_levels(repo: Path) -> None:
+    import json
+
+    import pytest
+
+    from agentkit.errors import ConfigError
+    from agentkit.repoconfig import load_polish_config, polish_config_path
+
+    polish_config_path(cwd=repo).write_text(json.dumps({"levels": {"*.md": 9}}), encoding="utf-8")
+
+    with pytest.raises(ConfigError):
+        load_polish_config(cwd=repo, valid_levels=(1, 2, 3, 4, 5))

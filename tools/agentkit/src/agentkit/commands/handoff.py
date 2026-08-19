@@ -12,6 +12,7 @@ from ..errors import ConfigError
 from ..handoff import TASKS, get_task, run_handoff
 from ..handoff.polish import run_polish
 from ..handoff.runner import DEFAULT_MAX_UNITS
+from ..handoff.style import DEFAULT_LANGUAGE, DEFAULT_LEVEL, LEVELS, languages, load_all
 from ..handoff.work import (
     DEFAULT_TARGET,
     DEFAULT_WORK_EFFORT,
@@ -20,7 +21,7 @@ from ..handoff.work import (
     pickup_prompt,
     run_work,
 )
-from ..repoconfig import load_repo_config
+from ..repoconfig import POLISH_CONFIG_NAME, load_polish_config, load_repo_config
 
 
 @click.group()
@@ -147,6 +148,32 @@ def commit(
     ctx.exit(int(result.exit_code))
 
 
+# Eager, so `--list-levels` answers before the command needs a repository or
+# a target set — it is documentation, not a run.
+def _list_levels(ctx: click.Context, param: click.Parameter, value: bool) -> None:
+    if not value or ctx.resilient_parsing:
+        return
+    for language in languages():
+        click.echo(f"{language}:")
+        for pack in load_all(language):
+            default = "  (default)" if pack.level == DEFAULT_LEVEL else ""
+            click.echo(f"  {pack.name}  {pack.label}{default}")
+            click.echo(f"      {pack.summary}")
+            click.echo(f"      종결={pack.ending}  부연={pack.verbosity}  ({pack.path})")
+    config = load_polish_config()
+    if config.levels:
+        click.echo(f"\nThis repository maps paths to levels ({config.path}), first match wins:")
+        for pattern, level in config.levels.items():
+            click.echo(f"  L{level}  ← {pattern}")
+    else:
+        click.echo(
+            "\nNo per-path level map in this repository. Add one to apply different 어체 in a "
+            'single run, e.g. {"levels": {"docs/decisions/**": 2, "*.md": 3}} in '
+            f"{POLISH_CONFIG_NAME} under the git directory."
+        )
+    ctx.exit(0)
+
+
 @handoff.command("polish")
 @click.argument("paths", nargs=-1, type=click.Path(path_type=Path))
 @click.option(
@@ -158,13 +185,40 @@ def commit(
     ),
 )
 @click.option(
+    "--level",
+    type=click.IntRange(min(LEVELS), max(LEVELS)),
+    default=None,
+    help=(
+        "어체 to polish into, for every target: 1 개조식, 2 해라체, 3 담백한 합니다체, "
+        "4 합니다체(완곡), 5 해요체. Overrides the repository's per-path map; without it "
+        f"that map decides, falling back to {DEFAULT_LEVEL}. `--list-levels` prints both."
+    ),
+)
+@click.option(
+    "--language",
+    default=DEFAULT_LANGUAGE,
+    show_default=True,
+    help=(
+        "Language to polish, and the filter that goes with it: prose in other "
+        "languages is left alone, and changed files with none of it never reach agy."
+    ),
+)
+@click.option(
+    "--list-levels",
+    is_flag=True,
+    is_eager=True,
+    expose_value=False,
+    callback=_list_levels,
+    help="Print the 어체 ladder and exit.",
+)
+@click.option(
     "--instruction",
     "instructions",
     multiple=True,
     callback=_validate_lines,
     help=(
-        "One extra directive per flag, carried to the polisher verbatim (e.g. a tone "
-        "change). Overrides the default style rules where they conflict."
+        "One extra directive per flag, carried to the polisher verbatim (e.g. a "
+        "terminology preference). Outranks the style pack where they conflict."
     ),
 )
 @_agy_client_options
@@ -173,6 +227,8 @@ def polish(
     ctx: click.Context,
     paths: tuple[Path, ...],
     base: str | None,
+    level: int | None,
+    language: str,
     instructions: tuple[str, ...],
     effort: str,
     timeout: str,
@@ -185,6 +241,10 @@ def polish(
     repository or not — are polished whole. Edits land in the working tree,
     never in a commit: review with `git diff`, undo with `git restore <file>`.
 
+    The 어체 comes from --level (default 3): one discrete style pack per
+    rung, 1 개조식 through 5 해요체. `--list-levels` prints them. --language
+    picks which pack set applies and filters the targets to match.
+
     Exit codes: 0 polished (or every file already clean), 1 nothing was
     polished — a refused command line included, 2 some files were polished
     with the rest unaccounted for.
@@ -192,6 +252,8 @@ def polish(
     result = run_polish(
         paths,
         base=base,
+        level=level,
+        language=language,
         instructions=instructions,
         client=AgyClient(effort=effort, timeout=timeout, mode="accept-edits"),
         verbose=verbose,
