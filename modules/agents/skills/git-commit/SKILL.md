@@ -64,7 +64,7 @@ agentkit commit config
      ```
   2. In an **interactive session**, present the detected defaults and ask the user to confirm:
      - **Whitelist**: Enable author email verification? (Default: ON, email: `user.email`)
-     - **Timeline**: Enable time window spoofing? (Default: ON, 19:00~21:00 Asia/Seoul)
+     - **Timeline**: Enable time window spoofing? (Default: OFF, 19:00~21:00 Asia/Seoul)
      - **Language**: Preferred commit language (`ko` / `en`)
      - **Style & Template**: Detected style (Conventional / Bracketed / Ticket) and template
      - **Verify commands**: how to run this repo's tests and linter. If the repo has a ready-made entry point (Makefile target, package script), store that. If not, ask the user to choose: generate a small script and store its path, or store the raw shell command inline. Leaving a field empty deliberately skips that verification everywhere. Also confirm `verify.enabled`: a repo with known-broken tests can record the commands now but start switched off (`--no-verify`), flipping it back on with `agentkit commit config --set verify.enabled=true` once fixed.

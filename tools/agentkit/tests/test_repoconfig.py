@@ -110,6 +110,14 @@ def test_analyze_repo_history_bracketed_english(repo: Path) -> None:
     assert analysis["style"] == "bracketed"
 
 
+def test_analyze_repo_history_empty_repo(repo: Path) -> None:
+    analysis = analyze_repo_history(cwd=repo)
+    assert analysis["language"] == "en"
+    assert analysis["style"] == "conventional"
+    assert analysis["total_commits"] == 0
+    assert "Overview of intent or motivation" in analysis["suggested_template"]
+
+
 def test_commit_cli_onboard_and_config(repo: Path, monkeypatch) -> None:
     monkeypatch.chdir(repo)
     runner = CliRunner()
@@ -129,6 +137,7 @@ def test_commit_cli_onboard_and_config(repo: Path, monkeypatch) -> None:
     assert res.exit_code == 0
     assert "Language:    ko" in res.output
     assert "Style:       conventional" in res.output
+    assert "Timeline:    [OFF]" in res.output
 
     # Modify config
     res = runner.invoke(cli, ["commit", "config", "--set", "conventions.language=en"])
@@ -139,6 +148,7 @@ def test_commit_cli_onboard_and_config(repo: Path, monkeypatch) -> None:
     loaded = load_repo_config(cwd=repo)
     assert loaded is not None
     assert loaded.conventions.language == "en"
+    assert loaded.timeline.enabled is False
 
 
 def test_repo_config_migration_and_backfill(repo: Path) -> None:
@@ -155,9 +165,9 @@ def test_repo_config_migration_and_backfill(repo: Path) -> None:
     # Whitelist is preserved
     assert loaded.whitelist.allowed_emails == ["legacy@dev.com"]
     # Missing timeline and conventions are filled with defaults
-    assert loaded.timeline.enabled is True
+    assert loaded.timeline.enabled is False
     assert loaded.timeline.start == "19:00"
-    assert loaded.conventions.language == "ko"
+    assert loaded.conventions.language == "en"
     # Pre-hooks/verify configs get the safe defaults
     assert loaded.hooks.policy == "bypass-intermediate"
     assert loaded.verify.configured() == []

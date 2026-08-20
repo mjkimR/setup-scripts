@@ -39,7 +39,7 @@ class WhitelistConfig:
 
 @dataclass
 class TimelineConfig:
-    enabled: bool = True
+    enabled: bool = False
     timezone: str = DEFAULT_TIMEZONE
     start: str = DEFAULT_START
     end: str = DEFAULT_END
@@ -48,7 +48,7 @@ class TimelineConfig:
 
 @dataclass
 class ConventionConfig:
-    language: str = "ko"  # "ko" or "en"
+    language: str = "en"  # "ko" or "en"
     style: str = "conventional"  # "conventional", "bracketed", "ticket", "freeform"
     template: str = "<type>(<scope>): <subject>\n\n<summary>\n- <bullet point 1>\n- <bullet point 2>"
     rules: list[str] = field(default_factory=list)
@@ -241,14 +241,14 @@ class RepoConfig:
                 allowed_emails=list(whitelist_data.get("allowed_emails", [])),
             ),
             timeline=TimelineConfig(
-                enabled=timeline_data.get("enabled", True),
+                enabled=timeline_data.get("enabled", False),
                 timezone=timeline_data.get("timezone", DEFAULT_TIMEZONE),
                 start=timeline_data.get("start", DEFAULT_START),
                 end=timeline_data.get("end", DEFAULT_END),
                 min_gap_seconds=timeline_data.get("min_gap_seconds", DEFAULT_MIN_GAP_SECONDS),
             ),
             conventions=ConventionConfig(
-                language=conventions_data.get("language", "ko"),
+                language=conventions_data.get("language", "en"),
                 style=conventions_data.get("style", "conventional"),
                 template=conventions_data.get(
                     "template",
@@ -335,10 +335,10 @@ def analyze_repo_history(cwd: Path | None = None, count: int = 25) -> dict[str, 
         return {
             "emails": [current_email] if current_email else [],
             "primary_email": current_email or "user@example.com",
-            "language": "ko",
+            "language": "en",
             "style": "conventional",
             "sample_subjects": [],
-            "suggested_template": "<type>(<scope>): <subject>\n\n[선택] 변경 목적 및 배경 1-2줄\n\n- <주요 변경 사항 1>\n- <주요 변경 사항 2>",
+            "suggested_template": "<type>(<scope>): <short subject line>\n\n[Optional] Overview of intent or motivation\n\n- <Key change 1>\n- <Key change 2>",
             "total_commits": 0,
         }
 

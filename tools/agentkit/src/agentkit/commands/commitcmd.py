@@ -223,7 +223,7 @@ def onboard(
     final_whitelist_enabled = True if whitelist is None else whitelist
     final_emails = list(emails) if emails else ([analysis["primary_email"]] if analysis["primary_email"] else [])
 
-    final_timeline_enabled = True if timeline is None else timeline
+    final_timeline_enabled = False if timeline is None else timeline
     final_lang = language or analysis["language"]
     final_style = style or analysis["style"]
     final_template = analysis["suggested_template"]

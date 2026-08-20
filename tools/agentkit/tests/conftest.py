@@ -110,6 +110,16 @@ time:
     monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
     # git_email() reads the identity of whatever directory the process is in.
     monkeypatch.chdir(repo)
+
+    repo_cfg_path = repo / ".git" / "agentkit-commit.json"
+    if repo_cfg_path.is_file():
+        from agentkit.repoconfig import load_repo_config, save_repo_config
+
+        cfg = load_repo_config(cwd=repo)
+        if cfg:
+            cfg.timeline.enabled = True
+            save_repo_config(cfg, cwd=repo)
+
     return config
 
 
