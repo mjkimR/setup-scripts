@@ -201,6 +201,25 @@ grep -Fq -- 'inline hooks' "$inline_hooks_home/install.out" || {
   exit 1
 }
 
+hook_state_home="$test_root/hook-state-home"
+mkdir -p "$hook_state_home/.codex"
+printf '%s\n' \
+  '[hooks.state]' \
+  '' \
+  '[hooks.state."/Users/test/.codex/hooks.json:user_prompt_submit:0:0"]' \
+  'trusted_hash = "sha256:test"' \
+  'enabled = true' >"$hook_state_home/.codex/config.toml"
+run_installer "$hook_state_home"
+assert_managed_hooks "$hook_state_home/.codex/hooks.json"
+grep -Fq -- '[hooks.state]' "$hook_state_home/.codex/config.toml" || {
+  echo "FAIL: installer removed ChatGPT/Codex hook trust state" >&2
+  exit 1
+}
+grep -Fq -- 'trusted_hash = "sha256:test"' "$hook_state_home/.codex/config.toml" || {
+  echo "FAIL: installer changed ChatGPT/Codex hook trust metadata" >&2
+  exit 1
+}
+
 quoted_notify_home="$test_root/quoted-notify-home"
 mkdir -p "$quoted_notify_home/.codex"
 printf '%s\n' '"notify" = ["/old/quoted-notifier"]' \

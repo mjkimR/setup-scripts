@@ -91,9 +91,16 @@ fi
 
 # Codex supports inline hook tables and hooks.json, but using both in one
 # config layer produces a merge warning. This installer owns hooks.json, so it
-# refuses to guess how user-owned inline hooks should be migrated.
+# refuses to guess how user-owned executable hooks should be migrated. The
+# ChatGPT app also writes [hooks.state] trust metadata; that is not a hook
+# definition and can safely coexist with hooks.json.
+codex_has_executable_inline_hooks() { # codex_has_executable_inline_hooks <config>
+  grep -E '^[[:space:]]*\[+[[:space:]]*hooks(\]|\.|[[:space:]]|$)' "$1" \
+    | grep -qvE '^[[:space:]]*\[+[[:space:]]*hooks[[:space:]]*\.[[:space:]]*state([[:space:]]*\.|[[:space:]]*\]+)'
+}
+
 if [ "$HAS_CODEX" = true ] && [ -f "$CODEX_CONFIG" ] \
-  && grep -qE '^[[:space:]]*\[+[[:space:]]*hooks(\]|\.|[[:space:]]|$)' "$CODEX_CONFIG"; then
+  && codex_has_executable_inline_hooks "$CODEX_CONFIG"; then
   log_error "config.toml contains inline hooks, which conflict with this installer's hooks.json policy."
   log_error "Move those hooks to $CODEX_HOOKS or remove the inline [hooks] tables, then re-run."
   log_error "No notification scripts or agent settings were changed."
