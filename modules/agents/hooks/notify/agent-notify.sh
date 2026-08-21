@@ -13,7 +13,8 @@
 #   Codex appends completion JSON to notify as the final argument, while the
 #   lifecycle hooks send JSON on stdin. This integration uses those events for
 #   retraction and approval prompts; Codex completion still
-#   notifies on every turn.
+#   notifies on every CLI turn. ChatGPT/Codex Desktop sessions use the app's
+#   own notifications and skip this terminal-notifier path.
 #
 # The banner is two lines and nothing more:
 #
@@ -48,6 +49,7 @@ STATE_DIR="${AGENT_NOTIFY_STATE_DIR:-${TMPDIR:-/tmp}/agent-notify-$UID}"
 LOG_DIR="${AGENT_NOTIFY_LOG_DIR:-${XDG_STATE_HOME:-$HOME/.local/state}/agent-notify}"
 LOG="$LOG_DIR/notify.log"
 FOCUS="$HOME/.local/bin/agent-focus.sh"
+AGENT_CODEX_HOME="${CODEX_HOME:-$HOME/.codex}"
 
 if ! mkdir -p "$LOG_DIR" 2>/dev/null; then
   LOG="/dev/null"
@@ -223,6 +225,25 @@ fi
 
 jqr() { printf '%s' "$payload" | jq -r "$1" 2>/dev/null; }
 
+codex_originator_from_transcript() { # codex_originator_from_transcript <path>
+  local transcript="$1" first_line
+  [ -f "$transcript" ] || return 0
+  IFS= read -r first_line <"$transcript" || return 0
+  printf '%s' "$first_line" |
+    jq -r 'select(.type == "session_meta") | .payload.originator // empty' 2>/dev/null
+}
+
+codex_transcript_for_session() { # codex_transcript_for_session <session-id>
+  local session_id="$1"
+  # Codex thread ids are UUID-like. Reject glob metacharacters before using the
+  # id in find's name pattern.
+  case "$session_id" in
+    ''|*[!0-9A-Fa-f-]*) return 0 ;;
+  esac
+  [ -d "$AGENT_CODEX_HOME/sessions" ] || return 0
+  find "$AGENT_CODEX_HOME/sessions" -type f -name "*-$session_id.jsonl" -print -quit 2>/dev/null
+}
+
 # `notify` currently supports only agent-turn-complete. Ignore future event
 # types until their meaning and payload are handled deliberately.
 if [ "$action" = "turn-end" ] && [ "$(jqr '.type // empty')" != "agent-turn-complete" ]; then
@@ -253,12 +274,62 @@ if [ -n "$STATE_DIR" ]; then
   state_key=$(printf '%s:%s' "$tool" "$session" | /usr/bin/shasum -a 256 | /usr/bin/awk '{print $1}')
   if [ -n "$state_key" ]; then
     stamp="$STATE_DIR/agent-notify-$state_key"
+    surface_stamp="$STATE_DIR/agent-surface-$state_key"
   else
     log "state key unavailable for $tool/$project"
     stamp=""
+    surface_stamp=""
   fi
 else
   stamp=""
+  surface_stamp=""
+fi
+
+# ChatGPT/Codex Desktop already owns its notification lifecycle. The external
+# notify payload has no documented surface field, so learn the originator from
+# the lifecycle hook's transcript_path once and retain it for completion.
+# A completion without lifecycle state falls back to the session transcript.
+# Unknown formats fail open so terminal CLI notifications are not lost.
+if [ "$tool" = "codex" ]; then
+  codex_surface="${AGENT_NOTIFY_CODEX_SURFACE:-}"
+  case "$codex_surface" in
+    cli|desktop|'') ;;
+    *)
+      log "invalid AGENT_NOTIFY_CODEX_SURFACE=$codex_surface; detecting"
+      codex_surface=""
+      ;;
+  esac
+
+  if [ -z "$codex_surface" ] && [ -n "$surface_stamp" ] && [ -f "$surface_stamp" ]; then
+    IFS= read -r codex_surface <"$surface_stamp" || codex_surface=""
+  fi
+
+  if [ -z "$codex_surface" ]; then
+    transcript=$(jqr '(.transcript_path // empty) | select(type == "string")')
+    if [ -z "$transcript" ] && [ "$action" = "turn-end" ]; then
+      transcript=$(codex_transcript_for_session "$session")
+    fi
+    originator=$(codex_originator_from_transcript "$transcript")
+    case "$originator" in
+      'Codex Desktop'|'ChatGPT Desktop') codex_surface="desktop" ;;
+      codex-tui)                         codex_surface="cli" ;;
+    esac
+  fi
+
+  if [ -n "$codex_surface" ] && [ -n "$surface_stamp" ]; then
+    surface_tmp="$surface_stamp.$$"
+    if printf '%s\n' "$codex_surface" >"$surface_tmp" && mv "$surface_tmp" "$surface_stamp"; then
+      :
+    else
+      rm -f "$surface_tmp"
+      log "surface $tool/$project failed to write detection state"
+    fi
+  fi
+
+  if [ "$codex_surface" = "desktop" ]; then
+    log "skip    codex desktop notification project=$project session=$session action=$action"
+    exit 0
+  fi
 fi
 
 case "$action" in

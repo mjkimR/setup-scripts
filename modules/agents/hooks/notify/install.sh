@@ -9,7 +9,9 @@
 #
 # Clicking raises the exact terminal the turn came from - the iTerm2 split
 # pane by session id, or the editor window already holding that project.
-# Codex PermissionRequest hooks also alert when an approval needs input.
+# Codex CLI PermissionRequest hooks also alert when an approval needs input.
+# ChatGPT/Codex Desktop keeps its own notification behavior and is excluded by
+# agent-notify.sh at runtime.
 #
 # Re-running is safe. Hook entries are matched by script name and replaced
 # rather than appended, so this never stacks duplicates.
@@ -243,6 +245,17 @@ write_codex_notify_config() { # write_codex_notify_config <input> <output> <repl
   ' "$input" >"$output"
 }
 
+codex_notify_wraps_managed_hook() { # codex_notify_wraps_managed_hook <config>
+  local config="$1"
+  # ChatGPT/Codex Desktop may wrap an existing notify command so its Computer
+  # Use client can observe turn completion, retaining this hook as
+  # --previous-notify. Replacing the whole array would discard that app-owned
+  # wrapper. Preserve it when it already delegates to the installed hook.
+  grep -Fq -- 'SkyComputerUseClient' "$config" \
+    && grep -Fq -- '--previous-notify' "$config" \
+    && grep -Fq -- 'agent-notify.sh' "$config"
+}
+
 if [ "$HAS_CLAUDE" = true ]; then
   claude_input="$CLAUDE_SETTINGS"
   if [ ! -f "$claude_input" ]; then
@@ -294,7 +307,13 @@ if [ "$HAS_CODEX" = true ]; then
   CODEX_LINE="notify = [\"$toml_notify_path\", \"codex\"]"
 
   if [ -f "$CODEX_CONFIG" ]; then
-    if ! write_codex_notify_config "$CODEX_CONFIG" "$STAGED_CODEX_CONFIG" "$CODEX_LINE"; then
+    if codex_notify_wraps_managed_hook "$CODEX_CONFIG"; then
+      if ! cp "$CODEX_CONFIG" "$STAGED_CODEX_CONFIG"; then
+        log_error "Failed to preserve the ChatGPT/Codex Desktop notify wrapper."
+        exit 1
+      fi
+      log_info "Preserving the ChatGPT/Codex Desktop notify wrapper."
+    elif ! write_codex_notify_config "$CODEX_CONFIG" "$STAGED_CODEX_CONFIG" "$CODEX_LINE"; then
       log_error "Could not safely update the top-level notify array in config.toml."
       log_error "Fix the existing notify value and re-run - refusing to overwrite."
       exit 1
@@ -500,8 +519,9 @@ log_info "----------------------------------------"
 log_success "Agent notification hooks installed."
 log_info "Claude Code notifies only for turns of 30s or longer; override with"
 log_info "  export AGENT_NOTIFY_MIN_SECONDS=<seconds>"
-log_info "Codex notifies on every turn; submitting the next prompt retracts that chat's banner."
-log_info "Codex also notifies when an approval request needs input."
+log_info "Codex CLI notifies on every turn; submitting the next prompt retracts that chat's banner."
+log_info "Codex CLI also notifies when an approval request needs input."
+log_info "ChatGPT/Codex Desktop uses only its built-in notifications."
 log_info "Debug log: ${NOTIFY_LOG_DIR}/notify.log"
 log_info "Open Claude Code's /hooks menu to inspect its hooks."
 log_info "Open Codex's /hooks menu once to review and trust its lifecycle hooks."

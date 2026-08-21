@@ -128,6 +128,24 @@ run_installer "$absent_home"
 }
 assert_managed_hooks "$absent_home/.codex/hooks.json"
 
+desktop_wrapper_home="$test_root/desktop-wrapper-home"
+mkdir -p "$desktop_wrapper_home/.codex"
+printf '%s\n' \
+  'notify = ["/Applications/ChatGPT.app/Contents/MacOS/SkyComputerUseClient", "turn-ended", "--previous-notify", "[\"/Users/test/.local/bin/agent-notify.sh\",\"codex\"]"]' \
+  >"$desktop_wrapper_home/.codex/config.toml"
+desktop_wrapper_checksum=$(shasum "$desktop_wrapper_home/.codex/config.toml" | awk '{print $1}')
+run_installer "$desktop_wrapper_home"
+[ "$(shasum "$desktop_wrapper_home/.codex/config.toml" | awk '{print $1}')" = "$desktop_wrapper_checksum" ] || {
+  echo "FAIL: installer replaced the ChatGPT/Codex Desktop notify wrapper" >&2
+  exit 1
+}
+grep -Fq -- 'Preserving the ChatGPT/Codex Desktop notify wrapper' \
+  "$desktop_wrapper_home/install.out" || {
+  echo "FAIL: installer did not report preserving the desktop notify wrapper" >&2
+  exit 1
+}
+assert_managed_hooks "$desktop_wrapper_home/.codex/hooks.json"
+
 multiline_home="$test_root/multiline-home"
 mkdir -p "$multiline_home/.codex"
 printf '%s\n' \

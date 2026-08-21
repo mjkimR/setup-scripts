@@ -17,9 +17,18 @@ log_dir="$test_root/log"
 project="$test_root/project-one"
 calls="$test_root/notifier.calls"
 runtime_notify="$test_root/agent-notify.sh"
+desktop_transcript="$test_home/.codex/sessions/2026/08/21/rollout-desktop-01a0216f-41e9-7101-939d-8ede834f55a2.jsonl"
+cli_transcript="$test_home/.codex/sessions/2026/08/21/rollout-cli-01a0216f-41e9-7101-939d-8ede834f55a3.jsonl"
+desktop_subagent_transcript="$test_home/.codex/sessions/2026/08/21/rollout-desktop-subagent-01a0216f-41e9-7101-939d-8ede834f55a4.jsonl"
 
-mkdir -p "$test_home" "$state_dir" "$log_dir" "$project"
+mkdir -p "$test_home" "$state_dir" "$log_dir" "$project" "$(dirname "$desktop_transcript")"
 : >"$calls"
+printf '%s\n' '{"type":"session_meta","payload":{"originator":"Codex Desktop"}}' \
+  >"$desktop_transcript"
+printf '%s\n' '{"type":"session_meta","payload":{"originator":"codex-tui"}}' \
+  >"$cli_transcript"
+printf '%s\n' '{"type":"session_meta","payload":{"originator":"Codex Desktop"}}' \
+  >"$desktop_subagent_transcript"
 
 # Keep the test isolated from the machine's real Notification Center. The
 # discovered notifier deliberately fails, proving the explicit test override
@@ -54,6 +63,21 @@ corrupt_session=$(jq -cn --arg cwd "$project" \
   '{hook_event_name:"UserPromptSubmit", session_id:"corrupt-stamp", cwd:$cwd}')
 future_event=$(jq -cn --arg cwd "$project" \
   '{type:"future-event", "thread-id":"thread-123", cwd:$cwd}')
+desktop_prompt=$(jq -cn --arg cwd "$project" --arg transcript "$desktop_transcript" \
+  '{hook_event_name:"UserPromptSubmit", session_id:"01a0216f-41e9-7101-939d-8ede834f55a2",
+    transcript_path:$transcript, cwd:$cwd}')
+desktop_completion=$(jq -cn --arg cwd "$project" \
+  '{type:"agent-turn-complete", "thread-id":"01a0216f-41e9-7101-939d-8ede834f55a2", cwd:$cwd}')
+desktop_permission=$(jq -cn --arg cwd "$project" --arg transcript "$desktop_transcript" \
+  '{hook_event_name:"PermissionRequest", session_id:"01a0216f-41e9-7101-939d-8ede834f55a2",
+    transcript_path:$transcript, cwd:$cwd, tool_name:"Bash"}')
+desktop_subagent_completion=$(jq -cn --arg cwd "$project" \
+  '{type:"agent-turn-complete", "thread-id":"01a0216f-41e9-7101-939d-8ede834f55a4", cwd:$cwd}')
+cli_prompt=$(jq -cn --arg cwd "$project" --arg transcript "$cli_transcript" \
+  '{hook_event_name:"UserPromptSubmit", session_id:"01a0216f-41e9-7101-939d-8ede834f55a3",
+    transcript_path:$transcript, cwd:$cwd}')
+cli_completion=$(jq -cn --arg cwd "$project" \
+  '{type:"agent-turn-complete", "thread-id":"01a0216f-41e9-7101-939d-8ede834f55a3", cwd:$cwd}')
 
 run_notify codex "$completion_one"
 run_notify codex "$completion_two"
@@ -63,6 +87,14 @@ printf '%s' "$permission" | run_notify codex input
 calls_before_future=$(wc -l <"$calls")
 run_notify codex "$future_event"
 calls_after_future=$(wc -l <"$calls")
+calls_before_desktop=$(wc -l <"$calls")
+printf '%s' "$desktop_prompt" | run_notify codex start
+run_notify codex "$desktop_completion"
+printf '%s' "$desktop_permission" | run_notify codex input
+run_notify codex "$desktop_subagent_completion"
+calls_after_desktop=$(wc -l <"$calls")
+printf '%s' "$cli_prompt" | run_notify codex start
+run_notify codex "$cli_completion"
 printf '%s' "$special_session" | run_notify claude start
 state_file_count=$(find "$state_dir" -maxdepth 1 -type f -name 'agent-notify-*' | wc -l | tr -d ' ')
 [ "$state_file_count" -eq 1 ] || {
@@ -104,6 +136,20 @@ grep -Fq -- '-title project-one · input needed' "$calls" || {
 }
 [ "$calls_before_future" -eq "$calls_after_future" ] || {
   echo "FAIL: an unsupported Codex notify event triggered a completion banner" >&2
+  exit 1
+}
+[ "$calls_before_desktop" -eq "$calls_after_desktop" ] || {
+  echo "FAIL: a Codex Desktop session triggered a terminal notification" >&2
+  exit 1
+}
+grep -Fq -- '-group agent-codex-01a0216f-41e9-7101-939d-8ede834f55a3' "$calls" || {
+  echo "FAIL: a Codex CLI session lost its terminal notification" >&2
+  exit 1
+}
+grep -Fq -- \
+  'skip    codex desktop notification project=project-one session=01a0216f-41e9-7101-939d-8ede834f55a2 action=turn-end' \
+  "$log_dir/notify.log" || {
+  echo "FAIL: a skipped Codex Desktop completion was not diagnosed" >&2
   exit 1
 }
 [ "$calls_before_corrupt_stop" -eq "$calls_after_corrupt_stop" ] || {
