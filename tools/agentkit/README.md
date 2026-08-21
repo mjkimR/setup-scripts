@@ -16,6 +16,7 @@ uv tool install --editable tools/agentkit
 ```text
 agentkit commit onboard|analyze|config        per-repo config, onboarding, history analysis
 agentkit commit verify [--only test|lint]     run the repo's verify commands, echoing each first
+agentkit commit-safe commit -m … [--amend]    the checked, stamped `git commit` skills call
 agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
 agentkit handoff commit [--safe/--plain]      delegate committing to the Antigravity CLI
                         [--hint L]... [--tests S]   advisory commit-unit labels + test attestation
