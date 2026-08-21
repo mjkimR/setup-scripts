@@ -86,6 +86,7 @@ agentkit commit onboard            # initialize repository commit config from gi
 agentkit commit analyze            # inspect detected language, author, and conventions
 agentkit commit config             # show or edit repository commit config
 agentkit commit-safe verify        # whitelist + timestamp pre-flight
+agentkit commit-safe commit -m …   # commit, identity checked and timestamp resolved
 agentkit handoff commit [--safe]   # what the commit handoff skills run
 agentkit handoff polish [paths…]   # what the polish handoff skill runs
 agentkit handoff polish --list-levels   # the 어체 ladder, L1 개조식 … L5 해요체

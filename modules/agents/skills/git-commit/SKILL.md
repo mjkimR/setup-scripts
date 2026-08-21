@@ -40,7 +40,8 @@ Configuration is maintained **per-repository** at `<git-dir>/agentkit-commit.jso
    - When invoked through `/handoff-commit` or headless runners:
      - If the prompt lists specific files, stage only those.
      - If the prompt asks for exactly one atomic unit, create a single commit and stop.
-     - If commit dates are already exported in the environment, do not resolve or override them.
+     - If commit dates are already exported in the environment, do not resolve or override them:
+       commit with plain `git commit`, which inherits them, not with `agentkit commit-safe commit`.
      - If the prompt carries caller hints (suggested commit units), use them to group and order the commits — but as advice, not instruction: the diff is the ground truth. Never create an empty or padded commit to match the hint count, never leave a change uncommitted because no hint covers it, and never reuse a hint verbatim as a subject — write subjects to the repository conventions. Report any hint/tree mismatch at the end.
      - If the prompt attests the test-suite state (`passed` / `failed` / `not-run`), trust it: do not run tests, builds, or linters yourself. `failed` is not a reason to hold back commits, and the attestation never goes into a commit message.
      - If the prompt states a hook policy (`bypass-intermediate`), follow it mechanically: `git commit --no-verify` for every commit that leaves changes uncommitted, plain `git commit` for the one that empties the tree. The policy comes from repo config — never add `--no-verify` on your own judgment, in either direction.
@@ -136,21 +137,28 @@ git add path/to/file1 path/to/file2
 
 Follow the repository's onboarded language (`ko` vs `en`) and template.
 
-Resolve the safe-mode environment, then commit. This applies with Timeline `[ON]`
-**and** `[OFF]`: the `env` call is what enforces the identity whitelist. When
-Timeline is `[OFF]` it simply exports no dates, so the commit uses the system
-clock — but skipping it would skip the whitelist check too.
+Commit through `agentkit`, never `git commit` directly. This applies with
+Timeline `[ON]` **and** `[OFF]`: the command is what enforces the identity
+whitelist. When Timeline is `[OFF]` it sets no dates and the commit uses the
+system clock — but reaching for plain `git commit` would skip the whitelist
+check too.
 
 ```bash
-safe_env="$(agentkit commit-safe env)" && eval "$safe_env" && \
-git commit -m "<subject matching repo template>" \
+agentkit commit-safe commit -m "<subject matching repo template>" \
   -m "[Optional 1-line overview of intent or motivation]" \
   -m "- <Key change or reason 1>" \
   -m "- <Key change or reason 2>"
 ```
 
-(The capture-then-eval form matters: a plain `eval "$(…)"` discards the CLI's
-exit code, so a whitelist rejection would fall through to the commit anyway.)
+`-m` behaves exactly as git's own, and `--amend` / `--no-verify` pass through.
+Add `--no-verify` only where the repository's hook policy calls for it (see the
+handoff contract above), never on your own judgment.
+
+**In a handoff run, use plain `git commit` instead.** The caller has already
+checked the identity and exported the dates, and a headless runner is granted
+`git`, not `agentkit` — reaching for `agentkit` there gets the call denied and
+the commit never happens. (Should you run it anyway, exported dates are
+inherited rather than re-resolved, so nothing drifts.)
 
 If multiple atomic units exist, repeat Steps 2–3 for each remaining set of changes until the working tree is clean.
 

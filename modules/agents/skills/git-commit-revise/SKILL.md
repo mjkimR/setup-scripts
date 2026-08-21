@@ -87,22 +87,16 @@ Analyze the commit against the criteria and present a structured review:
 
 If the user approves the revision or asks to apply it:
 
-- **If Timeline is Enabled (`[ON]` in `agentkit commit config`)**:
-  ```bash
-  eval "$(agentkit commit-safe env)" && \
-  git commit --amend -m "<revised subject>" \
-    -m "<summary>" \
-    -m "- <Key change 1>" \
-    -m "- <Key change 2>"
-  ```
+```bash
+agentkit commit-safe commit --amend -m "<revised subject>" \
+  -m "<summary>" \
+  -m "- <Key change 1>" \
+  -m "- <Key change 2>"
+```
 
-- **If Timeline is Disabled (`[OFF]`)**:
-  ```bash
-  git commit --amend -m "<revised subject>" \
-    -m "<summary>" \
-    -m "- <Key change 1>" \
-    -m "- <Key change 2>"
-  ```
+One command covers both Timeline settings: `[ON]` resolves a timestamp, `[OFF]`
+leaves the system clock alone, and either way the identity whitelist is checked
+before git runs.
 
 ---
 
