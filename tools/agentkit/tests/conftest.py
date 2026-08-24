@@ -99,8 +99,8 @@ allowed_emails:
 
 time:
   range:
-    start: "19:00"
-    end: "21:00"
+    start: "09:00"
+    end: "10:00"
   timezone: "Asia/Seoul"
   min_gap_seconds: 30
 """.lstrip(),
