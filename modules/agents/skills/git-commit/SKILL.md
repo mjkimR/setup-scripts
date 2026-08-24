@@ -19,7 +19,7 @@ the shared git dir, so every worktree of a repository commits under the same set
 1. **Repository Onboarding & Self-Configuration**:
    - Each repository maintains its own settings:
      - **Whitelist Check**: (on/off) Verifies `git config user.email` against allowed list.
-     - **Timeline Control**: (on/off) Enforces daily time windows (e.g. 09:00~10:00) and commit gaps.
+     - **Timeline Control**: (on/off) Enforces daily time windows (e.g. 09:00~18:00) and commit gaps.
      - **Conventions & Language**: (ko / en) Specific commit message template and tone.
      - **Hooks Policy**: how multi-commit splits treat git hooks. Default `bypass-intermediate`: intermediate commits use `git commit --no-verify`, the final commit runs hooks normally. `run-all` (keep every commit hook-green) is a recognized option that fails as **not implemented** — choosing it must error loudly, never silently degrade.
      - **Guards**: (`guards.protected_branches` / `deny_paths` / `allow_paths`, plus `guards.scan_secrets`) pre-commit guardrails the *command* enforces, not you. `agentkit commit-safe commit` refuses to commit onto a protected branch, refuses a staged path on the deny list, and refuses staged content matching a known credential format. All three lists are empty by default; the secret scan is on. A refusal exits non-zero as `BLOCKED` — report it and stop, never route around it.
@@ -67,7 +67,7 @@ agentkit commit config
      ```
   2. In an **interactive session**, present the detected defaults and ask the user to confirm:
      - **Whitelist**: Enable author email verification? (Default: ON, email: `user.email`)
-     - **Timeline**: Enable time window spoofing? (Default: OFF, 09:00~10:00 Asia/Seoul)
+     - **Timeline**: Enable time window spoofing? (Default: OFF, 09:00~18:00 Asia/Seoul)
      - **Guards**: Any branches to protect from direct commits? (Default: none — ask, do not assume `main`). Secret scanning is on by default and needs no question.
      - **Language**: Preferred commit language (`ko` / `en`)
      - **Style & Template**: Detected style (Conventional / Bracketed / Ticket) and template

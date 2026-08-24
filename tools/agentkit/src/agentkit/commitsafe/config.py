@@ -14,7 +14,7 @@ DEFAULT_CONFIG_PATH = Path.home() / ".config" / "git-commit-safe" / "config.yaml
 
 DEFAULT_TIMEZONE = "Asia/Seoul"
 DEFAULT_START = "09:00"
-DEFAULT_END = "10:00"
+DEFAULT_END = "18:00"
 DEFAULT_MIN_GAP_SECONDS = 30
 
 
@@ -86,7 +86,8 @@ allowed_emails:
   - {email}
 
 time:
-  # Daily initial commit time range (HH:MM ~ HH:MM)
+  # Daily working-hours window (HH:MM ~ HH:MM). Commits made inside it keep the
+  # real clock; a session outside it opens within 30 minutes of `start`.
   range:
     start: "{DEFAULT_START}"
     end: "{DEFAULT_END}"

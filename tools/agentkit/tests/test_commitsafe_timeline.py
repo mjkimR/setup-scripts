@@ -3,10 +3,22 @@
 from __future__ import annotations
 
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 from itertools import pairwise
+from zoneinfo import ZoneInfo
 
-from agentkit.commitsafe import load_config, resolve, state_path
+import pytest
+
+from agentkit.commitsafe import load_config, resolve, state_path, timeline
+
+TZ = ZoneInfo("Asia/Seoul")
+
+
+def _freeze(monkeypatch, hour: int, minute: int) -> datetime:
+    """Hold the wall clock still at today's HH:MM, and hand back that instant."""
+    frozen = datetime.now(TZ).replace(hour=hour, minute=minute, second=0, microsecond=0)
+    monkeypatch.setattr(timeline, "_now", lambda tz: frozen.astimezone(tz))
+    return frozen
 
 
 def test_first_of_the_day_lands_inside_the_window(safe_setup):
@@ -16,7 +28,28 @@ def test_first_of_the_day_lands_inside_the_window(safe_setup):
 
     assert stamp.first_of_day
     assert datetime.strptime("09:00", "%H:%M").time() <= stamp.when.time()
-    assert stamp.when.time() <= datetime.strptime("10:00", "%H:%M").time()
+    assert stamp.when.time() <= datetime.strptime("18:00", "%H:%M").time()
+
+
+def test_a_session_inside_the_window_keeps_the_real_clock(safe_setup, monkeypatch):
+    """Working hours need no fiction: 14:32 is already a plausible commit time."""
+    config = load_config()
+    frozen = _freeze(monkeypatch, 14, 32)
+
+    assert resolve(config).when == frozen
+
+
+@pytest.mark.parametrize("hour", [3, 8, 20, 23])
+def test_a_session_outside_the_window_opens_just_after_start(safe_setup, monkeypatch, hour):
+    config = load_config()
+    frozen = _freeze(monkeypatch, hour, 17)
+
+    stamp = resolve(config).when
+
+    start = frozen.replace(hour=9, minute=0)
+    # Not spread across the whole 09:00~18:00 window: the day starts when the
+    # day starts, and the later commits walk forward from there.
+    assert start <= stamp <= start + timedelta(minutes=30)
 
 
 def test_state_is_written_once_consumed(safe_setup):

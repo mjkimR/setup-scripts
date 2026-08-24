@@ -26,6 +26,12 @@ DEFAULT_STATE_HOME = Path.home() / ".local" / "state"
 CARRY_THRESHOLD_SECONDS = 120
 CLAMPED_GAP_SECONDS = (60, 120)
 
+# How far past the window's opening the day's first commit may be dropped when
+# the real clock sits outside working hours. Spreading it across the whole
+# window instead would put the day's first commit at an arbitrary afternoon
+# hour and every later one after it.
+FIRST_COMMIT_JITTER_SECONDS = 30 * 60
+
 
 @dataclass
 class Stamp:
@@ -88,7 +94,7 @@ def resolve(
         config = load_config()
 
     tz = _timezone(config.timezone)
-    now = datetime.now(tz)
+    now = _now(tz)
     today = now.strftime("%Y-%m-%d")
     now_epoch = time.time()
 
@@ -121,7 +127,7 @@ def resolve(
         state["last_virtual_epoch"] = target
         state["last_real_epoch"] = now_epoch
     else:
-        target = _random_start(config, now, tz)
+        target = _day_start(config, now, tz)
         state = {
             "date": today,
             "real_start_epoch": now_epoch,
@@ -136,7 +142,13 @@ def resolve(
     return Stamp(when=datetime.fromtimestamp(target, tz), first_of_day=not resumable)
 
 
-def _random_start(config: Config, now: datetime, tz: tzinfo) -> float:
+def _day_start(config: Config, now: datetime, tz: tzinfo) -> float:
+    """Where the day's first commit lands on the virtual timeline.
+
+    Inside the window the real clock already reads as work, so it is kept as
+    is. Outside it — a pre-dawn session, or one running well past the evening
+    — the day opens shortly after `start` instead.
+    """
     start_hour, start_minute = _hhmm(config.start)
     end_hour, end_minute = _hhmm(config.end)
 
@@ -149,12 +161,23 @@ def _random_start(config: Config, now: datetime, tz: tzinfo) -> float:
     if epoch_end <= epoch_start:
         epoch_end = epoch_start + 3600
 
-    return random.uniform(epoch_start, epoch_end)
+    epoch_now = now.timestamp()
+    if epoch_start <= epoch_now <= epoch_end:
+        return epoch_now
+
+    # A window narrower than the jitter must still contain its own first commit.
+    jitter = min(FIRST_COMMIT_JITTER_SECONDS, epoch_end - epoch_start)
+    return random.uniform(epoch_start, epoch_start + jitter)
 
 
 def _hhmm(value: str) -> tuple[int, int]:
     hour, minute = value.split(":")
     return int(hour), int(minute)
+
+
+def _now(tz: tzinfo) -> datetime:
+    """The wall clock, as one seam the tests can hold still."""
+    return datetime.now(tz)
 
 
 def _timezone(name: str) -> tzinfo:

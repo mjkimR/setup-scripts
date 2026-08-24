@@ -36,7 +36,7 @@ def test_it_commits_and_stamps_the_configured_window(safe_setup, repo, pending_f
     assert _log(repo, "%s") == "subject"
     assert _log(repo, "%b").strip() == "- body"
     hour = int(_log(repo, "%ad").split()[3].split(":")[0])
-    assert 9 <= hour <= 10, _log(repo, "%ad")
+    assert 9 <= hour <= 18, _log(repo, "%ad")
 
 
 def test_a_preset_date_is_inherited_without_consuming_a_stamp(safe_setup, repo, pending_file, monkeypatch):
