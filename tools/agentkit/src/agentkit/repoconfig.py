@@ -1,7 +1,9 @@
 """Per-repository commit configuration and history analysis.
 
-Stored per-repository at `<git-dir>/agentkit-commit.json`, with the polish
-handoff's path→어체 map alongside it at `<git-dir>/agentkit-polish.json`.
+Stored per-repository at `<common-git-dir>/agentkit-commit.json`, with the
+polish handoff's path→어체 map alongside it at `<common-git-dir>/agentkit-polish.json`.
+The common git dir, not this checkout's: every worktree of a repository must
+commit under the same whitelist, guards and conventions.
 The two are separate files on purpose: the commit config is created by
 onboarding and carries a schema version, while polishing works in any
 repository, onboarded or not, and must not start demanding onboarding to
@@ -21,8 +23,8 @@ from . import gitutil
 from .errors import ConfigError
 
 DEFAULT_TIMEZONE = "Asia/Seoul"
-DEFAULT_START = "19:00"
-DEFAULT_END = "21:00"
+DEFAULT_START = "09:00"
+DEFAULT_END = "10:00"
 DEFAULT_MIN_GAP_SECONDS = 30
 
 
@@ -66,6 +68,34 @@ DEFAULT_HOOKS_POLICY = "bypass-intermediate"
 @dataclass
 class HooksConfig:
     policy: str = DEFAULT_HOOKS_POLICY
+
+
+@dataclass
+class GuardsConfig:
+    """Pre-commit guardrails: where a commit may land, and what may go into it.
+
+    Both path lists default to empty on purpose. A filename tells you almost
+    nothing about whether a file holds a secret — `.env.example` is a normal
+    file to commit — so the built-in check reads content, and the path lists
+    exist only for the repository that knows something the scanner cannot.
+    `allow_paths` exempts a path from the content scan, for the file whose job
+    is to carry a credential-shaped string (a fixture, the scanner's own tests).
+    """
+
+    enabled: bool = True
+    scan_secrets: bool = True
+    protected_branches: list[str] = field(default_factory=list)
+    deny_paths: list[str] = field(default_factory=list)
+    allow_paths: list[str] = field(default_factory=list)
+
+    def protects(self, branch: str) -> bool:
+        return any(_glob_matches(pattern, branch) for pattern in self.protected_branches)
+
+    def denies(self, display: str) -> bool:
+        return any(_glob_matches(pattern, display) for pattern in self.deny_paths)
+
+    def exempts(self, display: str) -> bool:
+        return any(_glob_matches(pattern, display) for pattern in self.allow_paths)
 
 
 @dataclass
@@ -159,7 +189,7 @@ def _glob_to_regex(pattern: str) -> str:
 
 
 def polish_config_path(cwd: Path | None = None) -> Path:
-    return git_dir(cwd=cwd) / POLISH_CONFIG_NAME
+    return common_git_dir(cwd=cwd) / POLISH_CONFIG_NAME
 
 
 def load_polish_config(cwd: Path | None = None, *, valid_levels: tuple[int, ...] | None = None) -> PolishConfig:
@@ -219,6 +249,7 @@ class RepoConfig:
     conventions: ConventionConfig = field(default_factory=ConventionConfig)
     hooks: HooksConfig = field(default_factory=HooksConfig)
     verify: VerifyConfig = field(default_factory=VerifyConfig)
+    guards: GuardsConfig = field(default_factory=GuardsConfig)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -232,6 +263,7 @@ class RepoConfig:
         conventions_data = data.get("conventions", {}) if isinstance(data.get("conventions"), dict) else {}
         hooks_data = data.get("hooks", {}) if isinstance(data.get("hooks"), dict) else {}
         verify_data = data.get("verify", {}) if isinstance(data.get("verify"), dict) else {}
+        guards_data = data.get("guards", {}) if isinstance(data.get("guards"), dict) else {}
 
         return cls(
             path=path,
@@ -264,6 +296,13 @@ class RepoConfig:
                 test=verify_data.get("test", ""),
                 lint=verify_data.get("lint", ""),
             ),
+            guards=GuardsConfig(
+                enabled=guards_data.get("enabled", True),
+                scan_secrets=guards_data.get("scan_secrets", True),
+                protected_branches=list(guards_data.get("protected_branches", [])),
+                deny_paths=list(guards_data.get("deny_paths", [])),
+                allow_paths=list(guards_data.get("allow_paths", [])),
+            ),
         )
 
 
@@ -277,8 +316,23 @@ def migrate_config(config: RepoConfig) -> RepoConfig:
 
 
 def git_dir(cwd: Path | None = None) -> Path:
-    """Find the .git directory (or gitdir for worktrees) of the current repository."""
-    raw = gitutil.run(["rev-parse", "--git-dir"], cwd=cwd).strip()
+    """This checkout's git dir — `.git/worktrees/<name>` inside a worktree."""
+    return _resolve_git_dir("--git-dir", cwd=cwd)
+
+
+def common_git_dir(cwd: Path | None = None) -> Path:
+    """The git dir shared by every worktree — the main `.git`, from anywhere.
+
+    Configuration belongs here, not in `git_dir()`. Keyed by the per-worktree
+    dir, a second checkout of the same repository found no config, fell through
+    to the global one, and quietly committed under different rules than the
+    repository had set — a divergence with nothing to notice it by.
+    """
+    return _resolve_git_dir("--git-common-dir", cwd=cwd)
+
+
+def _resolve_git_dir(flag: str, *, cwd: Path | None) -> Path:
+    raw = gitutil.run(["rev-parse", flag], cwd=cwd).strip()
     path = Path(raw)
     if not path.is_absolute():
         root = gitutil.repo_root(cwd=cwd)
@@ -287,7 +341,7 @@ def git_dir(cwd: Path | None = None) -> Path:
 
 
 def repo_config_path(cwd: Path | None = None) -> Path:
-    return git_dir(cwd=cwd) / "agentkit-commit.json"
+    return common_git_dir(cwd=cwd) / "agentkit-commit.json"
 
 
 def load_repo_config(cwd: Path | None = None, *, auto_migrate: bool = False) -> RepoConfig | None:
@@ -297,7 +351,14 @@ def load_repo_config(cwd: Path | None = None, *, auto_migrate: bool = False) -> 
         return None
 
     if not path.is_file():
-        return None
+        # A worktree onboarded before configuration moved to the common dir
+        # keeps its own file. Reading it is what stops the upgrade from
+        # silently dropping that worktree back to the global config; the next
+        # save writes to the shared path and the stale copy stops mattering.
+        legacy = git_dir(cwd=cwd) / "agentkit-commit.json"
+        if not legacy.is_file():
+            return None
+        path = legacy
 
     try:
         data = json.loads(path.read_text(encoding="utf-8"))

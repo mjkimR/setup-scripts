@@ -25,7 +25,7 @@ from typing import Any
 
 from . import gitutil
 from .errors import ConfigError, GitCommandError, NotAGitRepoError
-from .repoconfig import git_dir
+from .repoconfig import common_git_dir, git_dir
 
 DEFAULT_ROOT = ".agents/tmp"
 DEFAULT_CLEAN_OLDER_THAN = "30d"
@@ -136,15 +136,6 @@ def is_ignored(rel_path: str, repo_root: Path) -> bool:
         what_to_report=f"A git command failed unexpectedly: git check-ignore {rel_path}.",
         details=[detail],
     )
-
-
-def common_git_dir(cwd: Path | None = None) -> Path:
-    """The shared git dir — where info/exclude lives, even from a worktree."""
-    raw = gitutil.run(["rev-parse", "--git-common-dir"], cwd=cwd).strip()
-    path = Path(raw)
-    if not path.is_absolute():
-        path = (gitutil.repo_root(cwd=cwd) / path).resolve()
-    return path
 
 
 def _append_ignore_line(file: Path, pattern: str, header: str | None) -> None:

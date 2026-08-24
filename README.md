@@ -62,7 +62,7 @@ Before running the script, you can adjust the configs inside the `config/` direc
 
 | Skill | Installed for | What it does |
 |---|---|---|
-| `git-commit` | Antigravity | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls. |
+| `git-commit` | Antigravity | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls, and pre-commit guardrails (protected branches, staged-secret scan). |
 | `git-commit-revise` | Antigravity | Review, critique, and propose revisions for commit messages or amend latest commits. |
 | `handoff-commit` | Claude Code, Codex | Delegates commit workflow to Antigravity CLI (`agy`), automatically respecting repository config. |
 | `polish-doc` | Antigravity | Copyedits Markdown prose into natural Korean at a chosen 어체, scoped to the changed regions; protects code, links, and structure. |
@@ -102,7 +102,7 @@ live in `modules/agents/skills/polish-doc/references/style/<language>/` and
 ship with the skill.
 
 Without `--level`, a repository can map paths to levels in
-`<git-dir>/agentkit-polish.json`, and one run then polishes each file at its
+`<common-git-dir>/agentkit-polish.json`, and one run then polishes each file at its
 own 어체:
 
 ```json
