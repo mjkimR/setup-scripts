@@ -25,7 +25,7 @@ from .errors import ConfigError
 DEFAULT_TIMEZONE = "Asia/Seoul"
 DEFAULT_START = "09:00"
 DEFAULT_END = "18:00"
-DEFAULT_MIN_GAP_SECONDS = 30
+DEFAULT_MIN_GAP_SECONDS = 5
 
 
 @dataclass

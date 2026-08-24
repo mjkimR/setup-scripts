@@ -102,7 +102,7 @@ time:
     start: "09:00"
     end: "18:00"
   timezone: "Asia/Seoul"
-  min_gap_seconds: 30
+  min_gap_seconds: 5
 """.lstrip(),
         encoding="utf-8",
     )

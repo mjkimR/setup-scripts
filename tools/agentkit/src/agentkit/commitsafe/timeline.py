@@ -32,6 +32,12 @@ CLAMPED_GAP_SECONDS = (60, 120)
 # hour and every later one after it.
 FIRST_COMMIT_JITTER_SECONDS = 30 * 60
 
+# The minimum gap is a floor, not a cadence: every gap landing on exactly
+# min_gap_seconds reads as machine-made. The jitter is a multiple of the
+# configured gap rather than a fixed number of seconds, so lowering the gap
+# actually tightens the spacing instead of leaving a fixed spread behind.
+GAP_JITTER_MULTIPLIER = 3
+
 
 @dataclass
 class Stamp:
@@ -122,7 +128,9 @@ def resolve(
         # two commits a few seconds apart would otherwise format to timestamps
         # that differ by less than min_gap_seconds, or to the very same second.
         if target < last_virtual + config.min_gap_seconds:
-            target = last_virtual + random.randint(config.min_gap_seconds, config.min_gap_seconds + 45)
+            target = last_virtual + random.uniform(
+                config.min_gap_seconds, config.min_gap_seconds * GAP_JITTER_MULTIPLIER
+            )
 
         state["last_virtual_epoch"] = target
         state["last_real_epoch"] = now_epoch
@@ -149,14 +157,8 @@ def _day_start(config: Config, now: datetime, tz: tzinfo) -> float:
     is. Outside it — a pre-dawn session, or one running well past the evening
     — the day opens shortly after `start` instead.
     """
-    start_hour, start_minute = _hhmm(config.start)
-    end_hour, end_minute = _hhmm(config.end)
-
-    start = datetime(now.year, now.month, now.day, start_hour, start_minute, tzinfo=tz)
-    end = datetime(now.year, now.month, now.day, end_hour, end_minute, tzinfo=tz)
-
-    epoch_start = start.timestamp()
-    epoch_end = end.timestamp()
+    epoch_start = _at(now, config.start, tz)
+    epoch_end = _at(now, config.end, tz)
     # A window that ends before it starts is a config typo, not a wrap-around.
     if epoch_end <= epoch_start:
         epoch_end = epoch_start + 3600
@@ -170,9 +172,16 @@ def _day_start(config: Config, now: datetime, tz: tzinfo) -> float:
     return random.uniform(epoch_start, epoch_start + jitter)
 
 
-def _hhmm(value: str) -> tuple[int, int]:
+def _at(day: datetime, value: str, tz: tzinfo) -> float:
+    """`day` at HH:MM, as an epoch.
+
+    Built by offset from midnight rather than by naming the hour, so that a
+    window closing at "24:00" — the end of the day, not an hour that exists —
+    resolves instead of raising.
+    """
     hour, minute = value.split(":")
-    return int(hour), int(minute)
+    midnight = datetime(day.year, day.month, day.day, tzinfo=tz)
+    return midnight.timestamp() + int(hour) * 3600 + int(minute) * 60
 
 
 def _now(tz: tzinfo) -> datetime:
