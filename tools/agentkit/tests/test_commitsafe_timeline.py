@@ -52,6 +52,20 @@ def test_a_session_outside_the_window_opens_just_after_start(safe_setup, monkeyp
     assert start <= stamp <= start + timedelta(minutes=30)
 
 
+def test_a_window_closing_at_midnight_resolves(safe_setup, monkeypatch):
+    """ "24:00" is the end of the day, not an hour — naming it must not raise."""
+    from agentkit.commitsafe.config import Config
+
+    config = load_config()
+    config = Config(path=config.path, allowed_emails=config.allowed_emails, start="19:00", end="24:00")
+    frozen = _freeze(monkeypatch, 3, 0)
+
+    stamp = resolve(config).when
+
+    start = frozen.replace(hour=19, minute=0)
+    assert start <= stamp <= start + timedelta(minutes=30)
+
+
 def test_state_is_written_once_consumed(safe_setup):
     config = load_config()
     resolve(config)
