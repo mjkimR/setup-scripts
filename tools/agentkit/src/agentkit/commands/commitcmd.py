@@ -10,7 +10,9 @@ import click
 
 from .. import gitutil
 from ..repoconfig import (
+    DEFAULT_END,
     DEFAULT_HOOKS_POLICY,
+    DEFAULT_START,
     HOOKS_POLICIES,
     ConventionConfig,
     HooksConfig,
@@ -61,31 +63,42 @@ def analyze(count: int, as_json: bool) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Output as JSON.")
 @click.option(
     "--set",
-    "set_pair",
+    "set_pairs",
     metavar="KEY=VALUE",
-    help="Update a config key (e.g. whitelist.enabled=false, conventions.language=en).",
+    multiple=True,
+    help=(
+        "Update a config key (e.g. whitelist.enabled=false, conventions.language=en). "
+        "Repeatable; every pair is applied, or none is."
+    ),
 )
-def show_config(as_json: bool, set_pair: str | None) -> None:
+def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
     """Show or update the current repository's commit configuration."""
     cfg = load_repo_config()
 
-    if set_pair:
+    if set_pairs:
         if cfg is None:
             raise click.ClickException("Repository is not onboarded yet. Run `agentkit commit onboard` first.")
-        if "=" not in set_pair:
-            raise click.ClickException("Invalid format for --set. Use KEY=VALUE (e.g. whitelist.enabled=false).")
 
-        key, value = set_pair.split("=", 1)
-        key = key.strip()
-        value = value.strip()
+        # Every pair is applied to the in-memory config before anything is
+        # written, so a typo in the last one cannot leave the earlier ones
+        # half-saved.
+        applied: list[tuple[str, str]] = []
+        for pair in set_pairs:
+            if "=" not in pair:
+                raise click.ClickException(
+                    f"Invalid format for --set: {pair!r}. Use KEY=VALUE (e.g. whitelist.enabled=false)."
+                )
+            key, value = (part.strip() for part in pair.split("=", 1))
+            _set_nested(cfg, key, value)
+            applied.append((key, value))
 
-        _set_nested(cfg, key, value)
         # Refuse before saving, so the config file never holds a policy the
         # runner would refuse at handoff time anyway.
-        if key == "hooks.policy":
-            ensure_supported_hooks_policy(value)
+        if any(key == "hooks.policy" for key, _ in applied):
+            ensure_supported_hooks_policy(cfg.hooks.policy)
         save_repo_config(cfg)
-        click.echo(f"[SUCCESS] Updated {key} = {value}")
+        for key, value in applied:
+            click.echo(f"[SUCCESS] Updated {key} = {value}")
 
     if cfg is None:
         path = repo_config_path()
@@ -112,8 +125,20 @@ def show_config(as_json: bool, set_pair: str | None) -> None:
         f"  Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
         f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
     )
+    guards = cfg.guards
+    click.echo(
+        f"  Guards:      {'[ON]' if guards.enabled else '[OFF]'} "
+        f"secrets: {'scan' if guards.scan_secrets else 'off'} | "
+        f"protected: {', '.join(guards.protected_branches) or '(none)'} | "
+        f"deny: {', '.join(guards.deny_paths) or '(none)'} | "
+        f"allow: {', '.join(guards.allow_paths) or '(none)'}"
+    )
     click.echo("\n--- Template ---")
     click.echo(cfg.conventions.template)
+    if cfg.conventions.rules:
+        click.echo("\n--- Rules ---")
+        for rule in cfg.conventions.rules:
+            click.echo(f"- {rule}")
 
 
 @commit_group.command("verify")
@@ -165,8 +190,8 @@ def verify(ctx: click.Context, only: str | None) -> None:
 @click.option("--language", type=click.Choice(["ko", "en"]), default=None, help="Preferred commit language.")
 @click.option("--style", default=None, help="Commit style (conventional, bracketed, ticket, custom).")
 @click.option("--email", "emails", multiple=True, help="Allowed whitelist email(s). Can be specified multiple times.")
-@click.option("--start", default=None, help="Timeline start time (HH:MM).")
-@click.option("--end", default=None, help="Timeline end time (HH:MM).")
+@click.option("--start", default=None, help=f"Timeline start time (HH:MM). [default: {DEFAULT_START}]")
+@click.option("--end", default=None, help=f"Timeline end time (HH:MM). [default: {DEFAULT_END}]")
 @click.option(
     "--hooks",
     "hooks_policy",
@@ -241,8 +266,8 @@ def onboard(
         ),
         timeline=TimelineConfig(
             enabled=final_timeline_enabled,
-            start=start or "19:00",
-            end=end or "21:00",
+            start=start or DEFAULT_START,
+            end=end or DEFAULT_END,
         ),
         conventions=ConventionConfig(
             language=final_lang,
@@ -271,6 +296,11 @@ def onboard(
     click.echo(
         f"  • Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
         f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
+    )
+    click.echo(
+        f"  • Guards:      {'[ON]' if cfg.guards.enabled else '[OFF]'} "
+        f"secret scan on, no protected branches "
+        f"(set with `agentkit commit config --set guards.protected_branches=main`)"
     )
 
 
