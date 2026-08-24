@@ -18,6 +18,14 @@ from .config import Config, load_config
 STATE_ENV = "XDG_STATE_HOME"
 DEFAULT_STATE_HOME = Path.home() / ".local" / "state"
 
+# Real elapsed time is carried into the virtual timeline commit by commit, but
+# only while it stays plausible as one edit-and-commit cycle. Carrying it
+# verbatim was the convenient thing, not the right one: an hour of thinking
+# between two commits dragged the day's later stamps far outside the window.
+# Past the threshold the advance collapses to a gap that still reads as work.
+CARRY_THRESHOLD_SECONDS = 120
+CLAMPED_GAP_SECONDS = (60, 120)
+
 
 @dataclass
 class Stamp:
@@ -95,17 +103,23 @@ def resolve(
     )
 
     if resumable:
-        elapsed = max(0.0, now_epoch - state["real_start_epoch"])
-        target = state["virtual_start_epoch"] + elapsed
+        # Both fall back to the day's anchor so a state file written before
+        # last_real_epoch existed still resumes instead of restarting the day.
+        last_real = state.get("last_real_epoch", state["real_start_epoch"])
+        last_virtual = state.get("last_virtual_epoch", state["virtual_start_epoch"])
+
+        real_gap = max(0.0, now_epoch - last_real)
+        advance = real_gap if real_gap < CARRY_THRESHOLD_SECONDS else random.uniform(*CLAMPED_GAP_SECONDS)
+        target = last_virtual + advance
 
         # The floor is measured against the previous commit, not against zero:
         # two commits a few seconds apart would otherwise format to timestamps
         # that differ by less than min_gap_seconds, or to the very same second.
-        last = state.get("last_virtual_epoch", state["virtual_start_epoch"])
-        if target < last + config.min_gap_seconds:
-            target = last + random.randint(config.min_gap_seconds, config.min_gap_seconds + 45)
+        if target < last_virtual + config.min_gap_seconds:
+            target = last_virtual + random.randint(config.min_gap_seconds, config.min_gap_seconds + 45)
 
         state["last_virtual_epoch"] = target
+        state["last_real_epoch"] = now_epoch
     else:
         target = _random_start(config, now, tz)
         state = {
@@ -113,6 +127,7 @@ def resolve(
             "real_start_epoch": now_epoch,
             "virtual_start_epoch": target,
             "last_virtual_epoch": target,
+            "last_real_epoch": now_epoch,
         }
 
     if persist:

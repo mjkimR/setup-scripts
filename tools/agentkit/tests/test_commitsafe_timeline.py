@@ -1,4 +1,4 @@
-"""Timestamp progression: the window, the elapsed-time carry, the minimum gap."""
+"""Timestamp progression: the window, the clamped carry, the minimum gap."""
 
 from __future__ import annotations
 
@@ -15,8 +15,8 @@ def test_first_of_the_day_lands_inside_the_window(safe_setup):
     stamp = resolve(config)
 
     assert stamp.first_of_day
-    assert datetime.strptime("19:00", "%H:%M").time() <= stamp.when.time()
-    assert stamp.when.time() <= datetime.strptime("21:00", "%H:%M").time()
+    assert datetime.strptime("09:00", "%H:%M").time() <= stamp.when.time()
+    assert stamp.when.time() <= datetime.strptime("10:00", "%H:%M").time()
 
 
 def test_state_is_written_once_consumed(safe_setup):
@@ -29,6 +29,7 @@ def test_state_is_written_once_consumed(safe_setup):
         "real_start_epoch",
         "virtual_start_epoch",
         "last_virtual_epoch",
+        "last_real_epoch",
     }
 
 
@@ -95,3 +96,50 @@ def test_configs_do_not_share_a_timeline(safe_setup, tmp_path):
 
     assert state_path(first) != state_path(second)
     assert resolve(second).first_of_day
+
+
+def _backdate_last_commit(config, seconds: float) -> float:
+    """Pretend the previous commit happened `seconds` ago. Returns its stamp."""
+    path = state_path(config)
+    state = json.loads(path.read_text(encoding="utf-8"))
+    state["last_real_epoch"] = state["last_real_epoch"] - seconds
+    path.write_text(json.dumps(state), encoding="utf-8")
+    return state["last_virtual_epoch"]
+
+
+def test_a_short_pause_is_carried_verbatim(safe_setup):
+    config = load_config()
+    resolve(config)
+
+    previous = _backdate_last_commit(config, 90)
+    advance = resolve(config).when.timestamp() - previous
+
+    # Under the threshold the real gap is the virtual gap: a 90-second pause
+    # between two commits is exactly what it looks like.
+    assert 89 <= advance <= 95, advance
+
+
+def test_a_long_pause_is_clamped_to_a_plausible_gap(safe_setup):
+    config = load_config()
+    resolve(config)
+
+    previous = _backdate_last_commit(config, 4 * 3600)
+    advance = resolve(config).when.timestamp() - previous
+
+    # Four hours of real thinking must not become four hours of virtual time,
+    # or the day's last commit lands nowhere near the configured window.
+    assert 60 <= advance <= 120, advance
+
+
+def test_a_long_day_stays_near_the_window(safe_setup):
+    config = load_config()
+    first = resolve(config)
+
+    for _ in range(12):
+        _backdate_last_commit(config, 3600)
+        last = resolve(config)
+
+    drift = last.when.timestamp() - first.when.timestamp()
+    # Twelve hour-long pauses used to carry 12 hours; now each one costs at
+    # most the clamp.
+    assert drift <= 12 * 120, drift
