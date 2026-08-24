@@ -144,6 +144,9 @@ class HandoffTask:
                 f"- Style: {repo_cfg.conventions.style}\n"
                 f"- Template:\n{repo_cfg.conventions.template}\n"
             )
+            if repo_cfg.conventions.rules:
+                rules = "".join(f"- {rule}\n" for rule in repo_cfg.conventions.rules)
+                conventions_note += f"\nRepository commit rules — follow every one:\n{rules}"
             # Only bypass-intermediate reaches this point: the runner's
             # preflight refuses every other policy value before delegating.
             if repo_cfg.hooks.policy == "bypass-intermediate":
