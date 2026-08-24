@@ -85,7 +85,7 @@ src/agentkit/
   agy/            Antigravity CLI adapter: invocation, log parsing, permissions
   codex/          Codex CLI adapter: headless `codex exec` invocation
   handoff/        commit: delegate-and-verify runner + task registry; work: continue a handoff document (spec/progress/result)
-  commitsafe/     config, identity whitelist, timestamp timeline
+  commitsafe/     config, identity whitelist, timestamp timeline, pre-commit guards
   commands/       click bindings (domain modules stay click-free)
 ```
 

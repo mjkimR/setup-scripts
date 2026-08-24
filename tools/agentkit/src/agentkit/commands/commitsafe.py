@@ -8,9 +8,11 @@ import subprocess
 import click
 
 from ..commitsafe import (
+    check_guards,
     checked_identity,
     config_path,
     git_email,
+    load_guards,
     resolve,
     write_default_config,
 )
@@ -40,9 +42,17 @@ def init(force: bool) -> None:
 
 
 @commit_safe.command()
-def verify() -> None:
+@click.option(
+    "--allow-secret",
+    "allow_secret",
+    multiple=True,
+    metavar="PATH",
+    help="Exempt one staged path from the secret scan. Repeatable.",
+)
+def verify(allow_secret: tuple[str, ...]) -> None:
     """Pre-flight check. Never consumes a timestamp."""
     config, email = checked_identity()
+    guard_notes = check_guards(load_guards(), allow_secret=allow_secret)
     stamp = resolve(config, persist=False)
 
     if not stamp.enabled:
@@ -56,6 +66,8 @@ def verify() -> None:
     click.echo(f"  Config:    {config.path}")
     click.echo(f"  Email:     {email} (allowed)")
     click.echo(f"  Session:   {session}")
+    for note in guard_notes:
+        click.echo(f"  {note}")
     if stamp.enabled:
         click.echo(f"  Range:     {config.start} ~ {config.end} ({config.timezone})")
     click.echo(f"  Next time: {stamp.format()} (preview — not consumed)")
@@ -96,13 +108,29 @@ INHERITED_DATE_VARS = ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE")
 )
 @click.option("--amend", is_flag=True, help="Amend the previous commit rather than creating one.")
 @click.option(
+    "--allow-secret",
+    "allow_secret",
+    multiple=True,
+    metavar="PATH",
+    help=(
+        "Exempt one staged path from the secret scan, for a fixture or placeholder. "
+        "Repeatable, named per path — never a blanket override, and always echoed."
+    ),
+)
+@click.option(
     "--no-verify",
     "no_verify",
     is_flag=True,
     help="Skip git hooks. Only ever from the repository's hook policy, never on the agent's judgment.",
 )
 @click.pass_context
-def commit(ctx: click.Context, messages: tuple[str, ...], amend: bool, no_verify: bool) -> None:
+def commit(
+    ctx: click.Context,
+    messages: tuple[str, ...],
+    amend: bool,
+    no_verify: bool,
+    allow_secret: tuple[str, ...],
+) -> None:
     """Check the identity, resolve the timestamp, and run `git commit`.
 
     One command replaces `eval "$(agentkit commit-safe env)" && git commit …`.
@@ -117,6 +145,8 @@ def commit(ctx: click.Context, messages: tuple[str, ...], amend: bool, no_verify
     this cannot also become a way to run arbitrary shell.
     """
     config, _ = checked_identity()
+    for note in check_guards(load_guards(), allow_secret=allow_secret):
+        click.echo(f"[INFO] {note}")
 
     inherited = [name for name in INHERITED_DATE_VARS if name in os.environ]
     if inherited:

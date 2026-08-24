@@ -49,6 +49,9 @@ class ErrorCode(str, Enum):
     REPO_NOT_ONBOARDED = "REPO_NOT_ONBOARDED"
     CONFIG_INVALID = "CONFIG_INVALID"
     IDENTITY_REJECTED = "IDENTITY_REJECTED"
+    PROTECTED_BRANCH = "PROTECTED_BRANCH"
+    SECRET_DETECTED = "SECRET_DETECTED"
+    PATH_DENIED = "PATH_DENIED"
     NOT_A_GIT_REPO = "NOT_A_GIT_REPO"
     GIT_COMMAND_FAILED = "GIT_COMMAND_FAILED"
     GIT_LOCK_HELD = "GIT_LOCK_HELD"
@@ -245,6 +248,40 @@ class WhitelistError(IdentityError):
 
     guardrail = True
     retry = Retry.UNSAFE
+
+
+class GuardrailError(AgentkitError):
+    """A pre-commit guardrail refused the commit.
+
+    Always `guardrail=True`, which renders as BLOCKED: the calling agent is
+    told to report it and stop rather than look for a way around. That is the
+    whole point of moving these checks out of a skill's prose and into the
+    command — an instruction can be reasoned past, an exit code cannot.
+    """
+
+    exit_code = ExitCode.FAILED
+    code = ErrorCode.GENERAL_ERROR
+    actor = Actor.USER
+    retry = Retry.UNSAFE
+    guardrail = True
+
+
+class ProtectedBranchError(GuardrailError):
+    """The current branch is one the repository protects from direct commits."""
+
+    code = ErrorCode.PROTECTED_BRANCH
+
+
+class SecretDetectedError(GuardrailError):
+    """Staged content matches a known credential format."""
+
+    code = ErrorCode.SECRET_DETECTED
+
+
+class DeniedPathError(GuardrailError):
+    """A staged path matches the repository's deny list."""
+
+    code = ErrorCode.PATH_DENIED
 
 
 class PreflightError(AgentkitError):
