@@ -263,7 +263,10 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
 
     # agy's exit code carries no signal (see agy/client.py); read the markers.
     if run.hit_permission_wall:
-        denied = tuple(f"Denied: {cmd}" for cmd in run.denied_commands() or ["(agy's log named none)"])
+        denied = tuple(
+            f"Denied: {cmd}"
+            for cmd in run.denied_commands() or ["(neither agy's log nor its conversation record named the command)"]
+        )
         out.advise(
             Advisory(
                 code=ErrorCode.AGY_PERMISSION_DENIED,
@@ -274,7 +277,7 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
                     "agy auto-denied commands it needed, so the work is likely incomplete. "
                     "Open-ended work may need grants beyond the commit set — ask the user."
                 ),
-                details=(*denied, "Partial work may exist.", *_resume_hint(doc)),
+                details=(*denied, *run.evidence(), "Partial work may exist.", *_resume_hint(doc)),
             ),
             "agy hit a permission wall.",
         )

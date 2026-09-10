@@ -309,6 +309,32 @@ def test_an_out_of_scope_denial_is_a_prompt_bug_not_a_grant_problem(
     assert "agentkit agy grant" not in reported
 
 
+def test_a_piped_denial_is_a_prompt_bug_and_names_the_evidence(
+    repo, granted, stub_agy, pending_file, capsys, monkeypatch, tmp_path
+):
+    """Seen live (2026-09-10): agy piped a permitted `git diff` into `grep` to read
+    the import lines of a large diff; the pipeline was denied as a whole and the
+    advisory blamed missing grants, naming no command, and left no log behind."""
+    from agentkit.agy import client as client_module
+
+    monkeypatch.setattr(client_module, "LOG_DIR", tmp_path / "logs")
+    pending_file("a.txt")
+    stub_agy.mode("none")
+    monkeypatch.setenv("AGY_STUB_DENIED", 'git diff src/main.py | grep -E "^+(from|import)"')
+
+    result = run(COMMIT, repo, stub_agy)
+
+    reported = capsys.readouterr().err
+    assert result.exit_code == ExitCode.FAILED
+    assert "outside the task's permitted set" in reported
+    assert 'Out of scope: git diff src/main.py | grep -E "^+(from|import)"' in reported
+    assert "pipe or chain" in reported
+    assert "Log: " in reported and (tmp_path / "logs").exists()
+    assert "agentkit agy grant" not in reported
+    # and the prompt now forbids the pipe up front
+    assert "Never pipe or chain" in stub_agy.calls()[0]["prompt"]
+
+
 def test_an_in_scope_denial_still_points_at_the_grant_fix(repo, granted, stub_agy, pending_file, capsys, monkeypatch):
     pending_file("a.txt")
     stub_agy.mode("none")

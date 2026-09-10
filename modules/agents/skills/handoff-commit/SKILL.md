@@ -135,8 +135,14 @@ remaining uncommitted files.
   start without them. Grant with `agentkit agy grant`. Note that
   `agentkit agy check` validates the full handoff set — it may also flag
   `command(git diff)`, which belongs to the polish handoff, not this one.
+- **A denial names the command.** Since agy 1.2.0 the denied command is
+  read from agy's conversation record, not its log, and every run's log is
+  kept under `~/.local/state/agentkit/agy-logs/` (newest 20). The block lists
+  them as `[DETAIL] Denied: …`, `Log: …`, `Conversation: …`. A piped or
+  chained command (`git diff … | grep …`) is denied as a whole and reported as
+  out of scope: that is a prompt problem, and no grant will fix it.
 - **Quota.** Each handoff spends Antigravity quota on a five-hour rolling limit.
   Keep it user-triggered; do not put it in a loop or on a schedule. A spent
   quota comes back as `[ACTION] DEFER` — report it and leave the retry to the
   user, because retrying is exactly what runs the limit down further.
-- Verified against `agy` 1.1.12. Re-test after a CLI update.
+- Verified against `agy` 1.2.0. Re-test after a CLI update.

@@ -35,8 +35,11 @@ _GIT_ONLY = """Only git commands are permitted, and only these: log, diff, statu
 add, commit. Anything else — cat, ls, pwd, bash, and notably `git reset` — is
 denied, and in a && chain one denied segment kills the whole command. To read an
 untracked file, `git add` it and use `git diff --cached <path>`; never the
-`git add -N` … `git reset` round trip. A denial is not a reason to stop: carry on
-with git and finish the job."""
+`git add -N` … `git reset` round trip. Never pipe or chain commands (`|`, `&&`,
+`;`): the whole line is checked and grep, head, wc, sed are all denied, so
+`git diff <path> | grep import` dies as a whole — read the plain `git diff`
+output instead. A denial is not a reason to stop: carry on with git and finish
+the job."""
 
 # Shared grouping rules for both commit tasks. Only git is permitted, so
 # per-commit greenness is nothing the receiver could verify anyway — stating
