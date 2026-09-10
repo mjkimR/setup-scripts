@@ -11,6 +11,7 @@ the advisory texts live in one place. The ordering is load-bearing:
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 
 from ..errors import Actor, Advisory, ErrorCode, Retry
@@ -29,13 +30,25 @@ class FailureTexts:
     unknown: Advisory  # ...and the advisory that goes with it
 
 
+_CHAIN = re.compile(r"\s*(?:\|\||&&|\||;)\s*")
+
+
+def segments(cmd: str) -> list[str]:
+    """The simple commands of a shell line: agy checks each one, so one denied segment denies the line."""
+    return [part.strip() for part in _CHAIN.split(cmd) if part.strip()]
+
+
 def outside_scope(denied: list[str], permitted: tuple[str, ...]) -> list[str]:
-    """The denied commands the task's own prompt never authorizes."""
+    """The denied commands the task's own prompt never authorizes.
+
+    A pipeline or chain counts as out of scope when any of its segments is: seen
+    live (2026-09-10), `git diff <file> | grep -E ...` was denied on the `grep`
+    half although `git diff` itself is permitted."""
 
     def is_permitted(cmd: str) -> bool:
         return any(cmd == prefix or cmd.startswith(prefix + " ") for prefix in permitted)
 
-    return [cmd for cmd in denied if not is_permitted(cmd)]
+    return [cmd for cmd in denied if not all(is_permitted(seg) for seg in segments(cmd))]
 
 
 def diagnose_failure(
@@ -75,12 +88,19 @@ def diagnose_failure(
                     ),
                     details=(
                         *(f"Out of scope: {cmd}" for cmd in out_of_scope),
+                        "A pipe or chain is denied as a whole when any segment is outside the set."
+                        if any(len(segments(cmd)) > 1 for cmd in out_of_scope)
+                        else "The prompt steered agy to this command; the allow-list is right to block it.",
+                        *run.evidence(),
                         left,
                         "No retry was attempted.",
                     ),
                 ),
             )
-        denied = tuple(f"Denied: {cmd}" for cmd in denied_commands or ["(agy's log named none)"])
+        denied = tuple(
+            f"Denied: {cmd}"
+            for cmd in denied_commands or ["(neither agy's log nor its conversation record named the command)"]
+        )
         return (
             "a command was auto-denied for lack of permission.",
             Advisory(
@@ -89,7 +109,7 @@ def diagnose_failure(
                 retry=after_fix,
                 fix=fix,
                 what_to_report=f"agy execution permission was denied; {texts.nothing_happened}.",
-                details=(*denied, left, "No retry was attempted."),
+                details=(*denied, *run.evidence(), left, "No retry was attempted."),
             ),
         )
     if run.looks_quota_limited:

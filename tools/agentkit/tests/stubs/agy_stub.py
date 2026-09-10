@@ -143,8 +143,10 @@ def main() -> int:
             # Overridable so tests can deny a command outside the task's
             # permitted set, not just an in-scope one missing its grant.
             denied = os.environ.get("AGY_STUB_DENIED", "git ls-files --others")
+            # Real agy escapes quotes inside the command text.
+            escaped = denied.replace('"', '\\"')
             Path(log_file).write_text(
-                f'permission check failed for command "{denied}"\n',
+                f'permission check failed for command "{escaped}"\n',
                 encoding="utf-8",
             )
         return 0
