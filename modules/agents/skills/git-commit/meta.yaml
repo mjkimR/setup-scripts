@@ -3,5 +3,5 @@ description: Git commit message generation, inspection, and conventional workflo
 
 targets:
   - antigravity
-  # - claude
-  # - codex
+  - claude
+  - codex

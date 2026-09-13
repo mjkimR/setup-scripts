@@ -12,7 +12,7 @@ An interactive, terminal-based (TUI) setup tool for automating the configuration
 - **Zsh & Oh My Zsh**: Performs unattended setup of Zsh, Oh My Zsh, and installs helper plugins (`zsh-autosuggestions`, `zsh-syntax-highlighting`).
 - **IDE Sync (VS Code, Cursor, VSCodium)**: Auto-detects installed editors, backs up existing configurations, copies preset settings/keybindings, and auto-installs plugins listed in `extensions.txt`.
 - **Agent Notification Hooks (macOS)**: One macOS notification format shared by Claude Code and Codex CLI, with click-to-focus that returns to the exact terminal the turn came from.
-- **Commit Skills**: A shared commit workflow for Antigravity, Claude Code and Codex, including a handoff that delegates committing to the Antigravity CLI.
+- **Commit Skills**: A shared commit workflow for Antigravity, Claude Code and Codex, including both the legacy Antigravity handoff and native commit-subagent delegation.
 
 ---
 
@@ -62,9 +62,9 @@ Before running the script, you can adjust the configs inside the `config/` direc
 
 | Skill | Installed for | What it does |
 |---|---|---|
-| `git-commit` | Antigravity | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls, and pre-commit guardrails (protected branches, staged-secret scan). |
+| `git-commit` | Antigravity, Claude Code, Codex | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls, and pre-commit guardrails (protected branches, staged-secret scan). |
 | `git-commit-revise` | Antigravity | Review, critique, and propose revisions for commit messages or amend latest commits. |
-| `handoff-commit` | Claude Code, Codex | Delegates commit workflow to Antigravity CLI (`agy`), automatically respecting repository config. |
+| `handoff-commit` | Claude Code, Codex | Delegates an explicitly requested commit to a native worker: Codex spawns `gpt-5.6-luna`; Claude Code uses the installed Sonnet profile. |
 | `polish-doc` | Antigravity | Copyedits Markdown prose into natural Korean at a chosen 어체, scoped to the changed regions; protects code, links, and structure. |
 | `handoff-polish` | Claude Code, Codex | Delegates Korean copyediting of changed Markdown to `agy`; edits land in the working tree, staged pre-polish state makes `git restore` the undo. |
 
@@ -77,6 +77,23 @@ it — the copyedit has to come from outside. Either way the runner verifies the
 outcome against the world (git, file hashes) rather than trusting `agy`'s exit
 code — headless `agy` reports success even when every tool call was denied.
 
+## Native Commit Subagent
+
+`modules/agents/subagents/` is the source of truth for reusable child-agent
+roles. Its first role, `commit`, runs the existing `git-commit` skill directly
+in the parent checkout. The explicit `handoff-commit` skill is the sender:
+Codex spawns one `gpt-5.6-luna` child; Claude Code delegates to the installed
+`agentkit-commit` profile (Sonnet, medium effort). The former Antigravity
+commit route survives only as an undocumented legacy CLI command; do not use it
+for new work.
+
+Run the new **Sync AI Agent subagents** setup option once. It symlinks the
+Claude definition to `~/.claude/agents/agentkit/`; Codex's model choice is made
+at the native spawn call, so it is represented by the sender skill instead of a
+machine-local configuration file. See
+[`modules/agents/subagents/README.md`](modules/agents/subagents/README.md) and
+[ADR 0010](docs/decisions/0010-native-commit-subagent-profiles.md).
+
 **The skills are documentation.** Everything they need to *do* lives in
 `tools/agentkit/`, a `uv` tool installed alongside them, because a `PATH` command
 is the only reference that resolves identically from all three agents:
@@ -87,7 +104,7 @@ agentkit commit analyze            # inspect detected language, author, and conv
 agentkit commit config             # show or edit repository commit config
 agentkit commit-safe verify        # whitelist + timestamp pre-flight
 agentkit commit-safe commit -m …   # commit, identity checked and timestamp resolved
-agentkit handoff commit [--safe]   # what the commit handoff skills run
+agentkit handoff commit [--safe]   # legacy Antigravity compatibility only
 agentkit handoff polish [paths…]   # what the polish handoff skill runs
 agentkit handoff polish --list-levels   # the 어체 ladder, L1 개조식 … L5 해요체
 agentkit agy check | agy grant     # the allow-list headless agy needs

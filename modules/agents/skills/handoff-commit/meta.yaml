@@ -1,5 +1,5 @@
 name: handoff-commit
-description: Hands the git-commit workflow off to the Antigravity CLI (agy) and verifies the result
+description: Delegates an explicitly requested commit workflow to the native Codex or Claude Code commit subagent
 
 targets:
   - claude

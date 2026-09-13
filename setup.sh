@@ -36,6 +36,7 @@ options=(
   "Sync VS Code/Cursor/VSCodium configs & extensions"
   "Install agent notification hooks (Claude Code & Codex, macOS only)"
   "Sync AI Agent skills & their CLIs (Antigravity, Claude Code, Codex)"
+  "Sync AI Agent subagents (Claude Code; Codex sender profiles)"
 )
 
 # Default checkboxes (true for essential tools, false for optional candidates)
@@ -47,6 +48,7 @@ defaults=(
   "true"  # IDE Settings
   "false" # Agent notification hooks
   "true"  # Agent skills
+  "true"  # Agent subagents
 )
 
 # Target script paths
@@ -58,6 +60,7 @@ scripts=(
   "$SCRIPT_DIR/modules/ide/vscode/install.sh"
   "$SCRIPT_DIR/modules/agents/hooks/install.sh"
   "$SCRIPT_DIR/modules/agents/skills/install.sh"
+  "$SCRIPT_DIR/modules/agents/subagents/install.sh"
 )
 
 # Call Multi-select TUI menu
