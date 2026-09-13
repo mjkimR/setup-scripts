@@ -108,69 +108,11 @@ scripts_agent=(
   "$SCRIPT_DIR/modules/agents/subagents/install.sh"
   "$SCRIPT_DIR/modules/agents/hooks/install.sh"
 )
-
-# Runner for a selected module category
-run_selected_modules() {
-  local prompt="$1"
-  local _rsm_opts_name="$2"
-  local _rsm_defs_name="$3"
-  local _rsm_scripts_name="$4"
-
-  local -a _rsm_opts=()
-  local -a _rsm_defs=()
-  local -a _rsm_scripts=()
-  eval "_rsm_opts=(\"\${${_rsm_opts_name}[@]}\")"
-  eval "_rsm_defs=(\"\${${_rsm_defs_name}[@]}\")"
-  eval "_rsm_scripts=(\"\${${_rsm_scripts_name}[@]}\")"
-
-  local -a selected_indices=()
-  multi_select_menu "$prompt" _rsm_opts _rsm_defs selected_indices
-
-  if [ ${#selected_indices[@]} -eq 0 ]; then
-    log_warn "No items selected in this category."
-    return 0
-  fi
-
-  log_info "Selected tools list:"
-  for idx in "${selected_indices[@]}"; do
-    log_info "  - ${_rsm_opts[idx]}"
-  done
-  echo ""
-
-  read -rp "Do you want to apply the selected configurations now? (Y/n): " confirm_install
-  case "$confirm_install" in
-    [nN][oO]|[nN])
-      log_info "Configuration aborted for this category."
-      return 0
-      ;;
-    *)
-      ;;
-  esac
-
-  for idx in "${selected_indices[@]}"; do
-    local script_path="${_rsm_scripts[idx]}"
-
-    if [ -f "$script_path" ]; then
-      chmod +x "$script_path"
-      if ! "$script_path"; then
-        log_error "An error occurred during setting up ${_rsm_opts[idx]}."
-        read -rp "Do you want to continue to the next step? (Y/n): " continue_next
-        case "$continue_next" in
-          [nN][oO]|[nN]) log_info "Setup aborted."; exit 1 ;;
-          *) continue ;;
-        esac
-      fi
-    else
-      log_error "Install script file not found: $script_path"
-    fi
-  done
-}
-
 # Prompt category if not specified via CLI
 if [ -z "$MODE" ]; then
   categories=(
     "🛠️  Development Environment (Git, Node/NVM, UV, Zsh, VS Code)"
-    "🤖 AI Agent Ecosystem (Skills, Subagents, Notification Hooks)"
+    "🤖 AI Agent Ecosystem (Skills & agentkit CLI, Subagents, Hooks)"
     "🚀 Full Setup (Environment + AI Agents)"
     "❌ Exit"
   )
