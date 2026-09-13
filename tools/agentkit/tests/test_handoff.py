@@ -89,10 +89,7 @@ def test_the_prompt_always_carries_the_grouping_rules(repo, granted, stub_agy, p
     run(COMMIT, repo, stub_agy)
 
     prompt = stub_agy.calls()[0]["prompt"]
-    # The two standing rules from the spec update: whole files only, and no
-    # effort spent keeping intermediate commits green.
-    assert "Never split one file's" in prompt
-    assert "do not need to keep tests or\n  the build green" in prompt
+    assert "Commit all pending changes together in a single commit" in prompt
     assert "Never run tests" in prompt
 
 
@@ -445,38 +442,24 @@ def test_an_unavailable_agy_is_reported(repo, granted, stub_agy, pending_file):
 # --- safe variant ----------------------------------------------------------
 
 
-def test_safe_mode_calls_agy_once_per_unit(repo, granted, stub_agy, pending_file, safe_setup):
+def test_safe_mode_calls_agy_in_single_turn(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     pending_file("b.txt")
     pending_file("c.txt")
-    stub_agy.mode("one")
+    stub_agy.mode("all")
 
     result = run(COMMIT_SAFE, repo, stub_agy)
 
     assert result.exit_code == ExitCode.OK
-    assert result.units == 3
-    assert len(stub_agy.calls()) == 3
+    assert result.units == 1
+    assert len(stub_agy.calls()) == 1
     assert not result.remaining
-
-
-def test_safe_mode_resolves_a_fresh_timestamp_per_unit(repo, granted, stub_agy, pending_file, safe_setup):
-    pending_file("a.txt")
-    pending_file("b.txt")
-    stub_agy.mode("one")
-
-    run(COMMIT_SAFE, repo, stub_agy)
-
-    dates = [call["author_date"] for call in stub_agy.calls()]
-    assert all(dates), "every call must carry a resolved date"
-    # A single batched call would stamp every commit identically, which is the
-    # whole reason the safe variant loops.
-    assert len(set(dates)) == len(dates)
-    assert [call["committer_date"] for call in stub_agy.calls()] == dates
+    assert "Commit ALL pending changes" in stub_agy.calls()[0]["prompt"]
 
 
 def test_safe_mode_stamps_the_commits_it_creates(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
-    stub_agy.mode("one")
+    stub_agy.mode("all")
 
     run(COMMIT_SAFE, repo, stub_agy)
 
@@ -485,31 +468,52 @@ def test_safe_mode_stamps_the_commits_it_creates(repo, granted, stub_agy, pendin
     assert logged == [stamped]
 
 
-def test_safe_mode_tells_each_unit_where_the_hints_stand(repo, granted, stub_agy, pending_file, safe_setup):
-    """Each per-unit call is a fresh agy with no memory of the previous split;
-    the prompt has to route it to the next hint via git log — naming the exact
-    permitted command, because "check git log" alone sent agy to the denied
-    `git show` and stalled the unit (seen live, 2026-08-18)."""
+def test_auto_push_triggers_git_push_when_enabled(repo, granted, stub_agy, pending_file, monkeypatch):
+    cfg = load_repo_config(cwd=repo)
+    cfg.push.enabled = True
+    save_repo_config(cfg, cwd=repo)
     pending_file("a.txt")
-    pending_file("b.txt")
-    stub_agy.mode("one")
+    stub_agy.mode("all")
 
-    run(COMMIT_SAFE, repo, stub_agy, hints=("feat: unit a", "feat: unit b"))
+    real_run = gitutil.run
 
-    for call in stub_agy.calls():
-        assert "first hint whose\n  work" in call["prompt"]
-        assert "git log --oneline --name-only -20" in call["prompt"]
-        assert "`git show` is denied" in call["prompt"]
-        assert "1. feat: unit a" in call["prompt"]
+    pushed_args = []
+
+    def fake_run(args, cwd=None):
+        if args and args[0] == "push":
+            pushed_args.append(list(args))
+            return ""
+        return real_run(args, cwd=cwd)
+
+    monkeypatch.setattr(gitutil, "run", fake_run)
+
+    result = run(COMMIT, repo, stub_agy)
+    assert result.exit_code == ExitCode.OK
+    assert len(pushed_args) == 1
+    assert pushed_args[0] == ["push"]
 
 
-def test_safe_mode_constrains_agy_to_one_unit(repo, granted, stub_agy, pending_file, safe_setup):
+def test_auto_push_can_be_disabled_via_flag(repo, granted, stub_agy, pending_file, monkeypatch):
+    cfg = load_repo_config(cwd=repo)
+    cfg.push.enabled = True
+    save_repo_config(cfg, cwd=repo)
     pending_file("a.txt")
-    stub_agy.mode("one")
+    stub_agy.mode("all")
 
-    run(COMMIT_SAFE, repo, stub_agy)
+    pushed_args = []
+    real_run = gitutil.run
 
-    assert "EXACTLY ONE atomic unit" in stub_agy.calls()[0]["prompt"]
+    def fake_run(args, cwd=None):
+        if args and args[0] == "push":
+            pushed_args.append(list(args))
+            return ""
+        return real_run(args, cwd=cwd)
+
+    monkeypatch.setattr(gitutil, "run", fake_run)
+
+    result = run(COMMIT, repo, stub_agy, push=False)
+    assert result.exit_code == ExitCode.OK
+    assert len(pushed_args) == 0
 
 
 def test_plain_mode_still_enforces_the_whitelist(repo, granted, stub_agy, pending_file):
@@ -560,12 +564,22 @@ def test_a_rejected_identity_spends_no_quota(repo, granted, stub_agy, pending_fi
 
 
 def test_the_loop_guard_stops_a_runaway_split(repo, granted, stub_agy, pending_file, safe_setup):
+    from agentkit.handoff.tasks import COMMIT_GRANTS, HandoffTask
+
+    looping_task = HandoffTask(
+        name="test-loop",
+        tag="handoff-test",
+        skill="/git-commit",
+        grants=COMMIT_GRANTS,
+        per_unit=True,
+        instructions="Commit one unit",
+    )
     pending_file("a.txt")
     pending_file("b.txt")
     pending_file("c.txt")
     stub_agy.mode("one")
 
-    result = run(COMMIT_SAFE, repo, stub_agy, max_units=2)
+    result = run(looping_task, repo, stub_agy, max_units=2)
 
     assert result.exit_code == ExitCode.INCOMPLETE
     assert len(stub_agy.calls()) == 2

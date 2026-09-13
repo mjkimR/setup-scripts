@@ -99,6 +99,15 @@ class GuardsConfig:
 
 
 @dataclass
+class PushConfig:
+    """Auto-push configuration after successful commit."""
+
+    enabled: bool = False
+    remote: str = ""
+    branch: str = ""
+
+
+@dataclass
 class VerifyConfig:
     """Repo-provided verification commands; empty string means unconfigured.
 
@@ -250,6 +259,7 @@ class RepoConfig:
     hooks: HooksConfig = field(default_factory=HooksConfig)
     verify: VerifyConfig = field(default_factory=VerifyConfig)
     guards: GuardsConfig = field(default_factory=GuardsConfig)
+    push: PushConfig = field(default_factory=PushConfig)
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -264,6 +274,7 @@ class RepoConfig:
         hooks_data = data.get("hooks", {}) if isinstance(data.get("hooks"), dict) else {}
         verify_data = data.get("verify", {}) if isinstance(data.get("verify"), dict) else {}
         guards_data = data.get("guards", {}) if isinstance(data.get("guards"), dict) else {}
+        push_data = data.get("push", {}) if isinstance(data.get("push"), dict) else {}
 
         return cls(
             path=path,
@@ -302,6 +313,11 @@ class RepoConfig:
                 protected_branches=list(guards_data.get("protected_branches", [])),
                 deny_paths=list(guards_data.get("deny_paths", [])),
                 allow_paths=list(guards_data.get("allow_paths", [])),
+            ),
+            push=PushConfig(
+                enabled=push_data.get("enabled", False),
+                remote=push_data.get("remote", ""),
+                branch=push_data.get("branch", ""),
             ),
         )
 

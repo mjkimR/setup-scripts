@@ -117,3 +117,57 @@ def test_it_takes_no_command_from_the_caller(safe_setup, repo):
 
     assert result.exit_code == 64, result.output
     assert json.dumps(result.output)  # output is a string, not a crash
+
+
+def test_commit_safe_auto_push(safe_setup, repo, pending_file, monkeypatch):
+    from agentkit.repoconfig import PushConfig, RepoConfig, repo_config_path, save_repo_config
+
+    pending_file("a.txt")
+    subprocess.run(["git", "add", "a.txt"], cwd=str(repo), check=True)
+
+    pushed_args = []
+    real_run = subprocess.run
+
+    def fake_subprocess_run(args, *pargs, **kwargs):
+        if args and args[0] == "git" and len(args) > 1 and args[1] == "push":
+            pushed_args.append(list(args))
+            import collections
+
+            Completed = collections.namedtuple("Completed", ["returncode"])
+            return Completed(0)
+        return real_run(args, *pargs, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", fake_subprocess_run)
+
+    # 1. Config push is disabled, but --push flag passed
+    result = CliRunner().invoke(cli, ["commit-safe", "commit", "-m", "test push flag", "--push"])
+    assert result.exit_code == 0
+    assert len(pushed_args) == 1
+    assert pushed_args[0] == ["git", "push"]
+
+    # 2. Config push is enabled, no flag passed -> auto-pushes
+    from agentkit.repoconfig import WhitelistConfig
+
+    save_repo_config(
+        RepoConfig(
+            path=repo_config_path(cwd=repo),
+            whitelist=WhitelistConfig(enabled=False),
+            push=PushConfig(enabled=True, remote="origin"),
+        ),
+        cwd=repo,
+    )
+    pending_file("b.txt")
+    subprocess.run(["git", "add", "b.txt"], cwd=str(repo), check=True)
+
+    result2 = CliRunner().invoke(cli, ["commit-safe", "commit", "-m", "test config push"])
+    assert result2.exit_code == 0
+    assert len(pushed_args) == 2
+    assert pushed_args[1] == ["git", "push", "origin"]
+
+    # 3. Config push is enabled, but --no-push flag passed -> does not push
+    pending_file("c.txt")
+    subprocess.run(["git", "add", "c.txt"], cwd=str(repo), check=True)
+
+    result3 = CliRunner().invoke(cli, ["commit-safe", "commit", "-m", "test no-push", "--no-push"])
+    assert result3.exit_code == 0
+    assert len(pushed_args) == 2

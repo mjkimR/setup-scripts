@@ -31,7 +31,7 @@ from ..errors import (
     NotOnboardedError,
     Retry,
 )
-from ..repoconfig import ensure_supported_hooks_policy, load_repo_config, repo_config_path
+from ..repoconfig import RepoConfig, ensure_supported_hooks_policy, load_repo_config, repo_config_path
 from ..ui import Reporter
 from .tasks import HandoffTask
 
@@ -56,6 +56,7 @@ def run_handoff(
     verbose: bool = False,
     hints: tuple[str, ...] = (),
     tests: str | None = None,
+    push: bool | None = None,
 ) -> HandoffResult:
     out = reporter or Reporter(task.tag)
     root = _preflight(task, client=client, repo=repo)
@@ -184,7 +185,34 @@ def run_handoff(
         out.note(f"Created {len(result.commits)} commit(s) across {result.units} unit(s). Working tree is clean.")
     else:
         out.note("Working tree is clean.")
+
+    # Auto-push if enabled by flag or repository configuration
+    repo_cfg = load_repo_config(cwd=root)
+    should_push = (repo_cfg.push.enabled if repo_cfg else False) if push is None else push
+    if should_push and result.commits:
+        _handle_auto_push(out, root, repo_cfg)
+
     return result
+
+
+def _handle_auto_push(out: Reporter, root: Path, repo_cfg: RepoConfig | None) -> bool:
+    args = ["push"]
+    target = "remote"
+    if repo_cfg and repo_cfg.push.remote:
+        args.append(repo_cfg.push.remote)
+        target = repo_cfg.push.remote
+        if repo_cfg.push.branch:
+            args.append(repo_cfg.push.branch)
+            target = f"{repo_cfg.push.remote} {repo_cfg.push.branch}"
+
+    out.note(f"Auto-push enabled. Pushing commits ({' '.join(args)})…")
+    try:
+        gitutil.run(args, cwd=root)
+        out.note(f"Successfully pushed commits to {target}.")
+        return True
+    except Exception as err:
+        out.error(f"Auto-push failed: {err}")
+        return False
 
 
 def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Path:

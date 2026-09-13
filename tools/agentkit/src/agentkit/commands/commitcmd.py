@@ -16,6 +16,7 @@ from ..repoconfig import (
     HOOKS_POLICIES,
     ConventionConfig,
     HooksConfig,
+    PushConfig,
     RepoConfig,
     TimelineConfig,
     VerifyConfig,
@@ -133,6 +134,10 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
         f"deny: {', '.join(guards.deny_paths) or '(none)'} | "
         f"allow: {', '.join(guards.allow_paths) or '(none)'}"
     )
+    click.echo(
+        f"  Push:        {'[ON]' if cfg.push.enabled else '[OFF]'} "
+        f"remote: {cfg.push.remote or '(default)'} | branch: {cfg.push.branch or '(current)'}"
+    )
     click.echo("\n--- Template ---")
     click.echo(cfg.conventions.template)
     if cfg.conventions.rules:
@@ -221,6 +226,22 @@ def verify(ctx: click.Context, only: str | None) -> None:
         "commands on record but switches verification off (e.g. tests known-broken and mid-repair)."
     ),
 )
+@click.option(
+    "--push/--no-push",
+    "push_enabled",
+    default=None,
+    help="Enable or disable auto-push after commit. [default: off]",
+)
+@click.option(
+    "--push-remote",
+    default=None,
+    help="Remote to push to (e.g. origin). Defaults to git default.",
+)
+@click.option(
+    "--push-branch",
+    default=None,
+    help="Branch to push to. Defaults to current branch.",
+)
 def onboard(
     force: bool,
     whitelist: bool | None,
@@ -234,6 +255,9 @@ def onboard(
     test_cmd: str | None,
     lint_cmd: str | None,
     verify_enabled: bool | None,
+    push_enabled: bool | None,
+    push_remote: str | None,
+    push_branch: str | None,
 ) -> None:
     """Initialize or update repository commit configuration with auto-detected defaults."""
     existing = load_repo_config()
@@ -280,6 +304,11 @@ def onboard(
             test=test_cmd or "",
             lint=lint_cmd or "",
         ),
+        push=PushConfig(
+            enabled=False if push_enabled is None else push_enabled,
+            remote=push_remote or "",
+            branch=push_branch or "",
+        ),
     )
 
     save_repo_config(cfg)
@@ -301,6 +330,10 @@ def onboard(
         f"  • Guards:      {'[ON]' if cfg.guards.enabled else '[OFF]'} "
         f"secret scan on, no protected branches "
         f"(set with `agentkit commit config --set guards.protected_branches=main`)"
+    )
+    click.echo(
+        f"  • Push:        {'[ON]' if cfg.push.enabled else '[OFF]'} "
+        f"remote: {cfg.push.remote or '(default)'} | branch: {cfg.push.branch or '(current)'}"
     )
 
 

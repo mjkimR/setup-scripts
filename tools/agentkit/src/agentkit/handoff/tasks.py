@@ -41,18 +41,9 @@ untracked file, `git add` it and use `git diff --cached <path>`; never the
 output instead. A denial is not a reason to stop: carry on with git and finish
 the job."""
 
-# Shared grouping rules for both commit tasks. Only git is permitted, so
-# per-commit greenness is nothing the receiver could verify anyway — stating
-# that explicitly stops it from trying, or from apologizing for not trying.
-_GROUPING_RULES = """Grouping rules:
-- A file's entire change belongs to exactly one commit. Never split one file's
-  changes across commits — no partial staging. When one file carries several
-  concerns, put it whole into the commit of its dominant concern (tie-break:
-  the earliest commit that needs it) and note the piggybacked change in that
-  commit's body.
-- Intermediate commits of a multi-commit split do not need to keep tests or
-  the build green. Only the last commit must leave the tree exactly as it is
-  now. Spend no effort verifying or ordering for per-commit greenness.
+# Commit rules for both commit tasks. Only git is permitted.
+_GROUPING_RULES = """Commit rules:
+- Commit all pending changes together in a single commit. Do not split changes into multiple commits.
 - Never run tests, builds or linters — committing is the whole job, and
   nothing but git is permitted anyway."""
 
@@ -186,19 +177,19 @@ COMMIT = HandoffTask(
     skill="/git-commit",
     grants=COMMIT_GRANTS,
     instructions=(
-        "Commit every pending change in that repository now.\n"
+        "Commit all pending changes in that repository together in a single commit now.\n"
         "If you cannot tell whether some file belongs in a commit, leave it "
         "uncommitted\nand say so at the end."
     ),
 )
 
-# Safe commit task with per-unit execution and timestamp injection.
+# Safe commit task with timestamp injection (single turn, all pending changes).
 COMMIT_SAFE = HandoffTask(
     name="commit-safe",
     tag="handoff-safe",
     skill="/git-commit",
     grants=COMMIT_GRANTS,
-    per_unit=True,
+    per_unit=False,
     log_format="%h  %ad  %s",
     date_format="%Y-%m-%d %H:%M:%S",
     env_factory=_commit_safe_env,
@@ -206,9 +197,7 @@ COMMIT_SAFE = HandoffTask(
         "GIT_AUTHOR_DATE and GIT_COMMITTER_DATE are already set in your "
         "environment. Do\nNOT resolve or override them — a plain `git add` and "
         "`git commit` inherits them.\n\n"
-        "Commit EXACTLY ONE atomic unit of the pending changes, then stop. Leave "
-        "every\nother change uncommitted; you will be called again for the next "
-        "unit."
+        "Commit ALL pending changes in that repository together in a single commit now."
     ),
 )
 

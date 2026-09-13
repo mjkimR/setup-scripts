@@ -16,6 +16,7 @@ from ..commitsafe import (
     resolve,
     write_default_config,
 )
+from ..repoconfig import load_repo_config
 
 
 @click.group("commit-safe")
@@ -123,6 +124,12 @@ INHERITED_DATE_VARS = ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE")
     is_flag=True,
     help="Skip git hooks. Only ever from the repository's hook policy, never on the agent's judgment.",
 )
+@click.option(
+    "--push/--no-push",
+    "push",
+    default=None,
+    help="Push to remote after committing. Defaults to repo config if omitted.",
+)
 @click.pass_context
 def commit(
     ctx: click.Context,
@@ -130,6 +137,7 @@ def commit(
     amend: bool,
     no_verify: bool,
     allow_secret: tuple[str, ...],
+    push: bool | None,
 ) -> None:
     """Check the identity, resolve the timestamp, and run `git commit`.
 
@@ -169,4 +177,18 @@ def commit(
     # headless run. Output is inherited: a failing hook has to reach the caller
     # verbatim, not compressed into an advisory.
     result = subprocess.run(argv, env={**os.environ, **exports})
+    if result.returncode == 0:
+        repo_cfg = load_repo_config()
+        should_push = (repo_cfg.push.enabled if repo_cfg else False) if push is None else push
+        if should_push:
+            push_argv = ["git", "push"]
+            if repo_cfg and repo_cfg.push.remote:
+                push_argv.append(repo_cfg.push.remote)
+                if repo_cfg.push.branch:
+                    push_argv.append(repo_cfg.push.branch)
+            click.echo(f"[INFO] Auto-pushing ({' '.join(push_argv)})…")
+            push_res = subprocess.run(push_argv)
+            if push_res.returncode != 0:
+                click.echo("[ERROR] Auto-push failed.", err=True)
+
     ctx.exit(result.returncode)

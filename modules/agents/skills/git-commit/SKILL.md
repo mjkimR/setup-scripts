@@ -20,23 +20,23 @@ the shared git dir, so every worktree of a repository commits under the same set
    - Each repository maintains its own settings:
      - **Whitelist Check**: (on/off) Verifies `git config user.email` against allowed list.
      - **Timeline Control**: (on/off) Enforces daily time windows (e.g. 09:00~18:00) and commit gaps.
+     - **Auto-Push**: (on/off, `push.enabled`) Automatically push commits to remote after successful commit. Default is OFF.
      - **Conventions & Language**: (ko / en) Specific commit message template and tone.
-     - **Hooks Policy**: how multi-commit splits treat git hooks. Default `bypass-intermediate`: intermediate commits use `git commit --no-verify`, the final commit runs hooks normally. `run-all` (keep every commit hook-green) is a recognized option that fails as **not implemented** — choosing it must error loudly, never silently degrade.
+     - **Hooks Policy**: how commits treat git hooks.
      - **Guards**: (`guards.protected_branches` / `deny_paths` / `allow_paths`, plus `guards.scan_secrets`) pre-commit guardrails the *command* enforces, not you. `agentkit commit-safe commit` refuses to commit onto a protected branch, refuses a staged path on the deny list, and refuses staged content matching a known credential format. All three lists are empty by default; the secret scan is on. A refusal exits non-zero as `BLOCKED` — report it and stop, never route around it.
      - **Verify Commands**: (`verify.test` / `verify.lint`, plus `verify.enabled` on/off) shell commands that verify the tree (e.g. `uv run pytest -q`, `ruff check`). An empty field skips that kind of verification; `verify.enabled=false` switches all of it off while keeping the commands on record — for repos whose tests are known-broken and mid-repair. Transparency is non-negotiable: whoever runs these must show the exact command line (`agentkit commit verify` echoes each one before running it).
    - On first use in a repository, the agent enters **Onboarding Mode** to analyze history and establish these settings.
    - Subsequent runs seamlessly use the saved settings. Re-onboarding can be triggered anytime with `/git-commit onboard`.
 
-2. **Atomic Commits (Split Logical Concerns)**:
-   - Group related changes together. Never combine unrelated features, bug fixes, refactoring, dependency updates, or documentation into a single mega-commit.
-   - Explicitly stage files (`git add <file1> <file2>`) belonging to each specific logical unit. Never run `git add .` indiscriminately.
-   - **A file is the smallest unit.** A file's entire change belongs to exactly one commit — never split one file's changes across commits via partial staging. When one file carries several concerns, commit it whole with its dominant concern (tie-break: the earliest commit that needs it) and note the piggybacked change in that commit's body.
-   - **Intermediate commits may be red.** In a multi-commit split, intermediate commits need not keep tests or the build green — only the final commit must reproduce the working tree as it stood at the start. Spend no effort verifying or reordering for per-commit greenness; grouping by concern wins.
+2. **Single-Turn Comprehensive Commit (No Split)**:
+   - Commit all pending changes together in a single commit. Do not split changes across multiple atomic commits.
+   - Splitting commits introduces extra token overhead, repeated permission requests, git state toggle delays, and fragmented histories.
+   - Stage all intended changes together (`git add <files>` or `git add -A`).
    - Never commit sensitive files (`.env`, credentials), temporary files, or build artifacts (`dist/`, `build/`, `node_modules/`). Staging judgement is still yours: the secret scan is a backstop for the obvious accident (an issued API key, a private key block), not a substitute for looking at what you stage. A filename alone decides nothing — `.env.example` is a normal file to commit.
 
 3. **Direct Autonomous Execution**:
    - Once onboarded, do NOT ask for confirmation before committing.
-   - Proactively partition changes, stage relevant files, craft messages according to the repository template, and execute commits directly.
+   - Proactively stage all relevant files, craft messages according to the repository template, and execute commits directly in a single turn.
 
 4. **Honor Caller Constraints (Handoff Contract)**:
    - When invoked through `/handoff-commit` or headless runners:
@@ -72,11 +72,12 @@ agentkit commit config
      - **Language**: Preferred commit language (`ko` / `en`)
      - **Style & Template**: Detected style (Conventional / Bracketed / Ticket) and template
      - **Verify commands**: how to run this repo's tests and linter. If the repo has a ready-made entry point (Makefile target, package script), store that. If not, ask the user to choose: generate a small script and store its path, or store the raw shell command inline. Leaving a field empty deliberately skips that verification everywhere. Also confirm `verify.enabled`: a repo with known-broken tests can record the commands now but start switched off (`--no-verify`), flipping it back on with `agentkit commit config --set verify.enabled=true` once fixed.
+     - **Auto-Push**: Enable automatic git push after commit? (Default: OFF)
      - **Hooks policy**: default `bypass-intermediate`; offer `run-all` only as a visibly closed option (it errors as not implemented).
   3. Save the configuration:
      ```bash
      agentkit commit onboard --language <ko|en> --style <style> [--whitelist/--no-whitelist] [--timeline/--no-timeline] \
-       [--test-cmd "<command>"] [--lint-cmd "<command>"] [--verify/--no-verify] [--hooks <policy>]
+       [--test-cmd "<command>"] [--lint-cmd "<command>"] [--verify/--no-verify] [--hooks <policy>] [--push/--no-push]
      ```
   *(In a headless handoff run, `agentkit commit onboard` will initialize auto-detected defaults automatically without prompting).*
 
@@ -129,17 +130,13 @@ git diff
 
 ---
 
-### Step 2: Partition Changes into Atomic Units
+### Step 2: Stage All Pending Changes
 
-Identify distinct logical changes:
-- Feature additions vs. bug fixes
-- Code refactoring vs. dependency updates
-- Source code vs. tests / documentation
-
-Stage only the files for the first logical unit:
+Stage all intended files together for a single comprehensive commit:
 ```bash
-git add path/to/file1 path/to/file2
+git add -A
 ```
+*(Ensure untracked files you stage do not include secrets or unwanted artifacts; omit sensitive files).*
 
 ---
 
@@ -160,9 +157,9 @@ agentkit commit-safe commit -m "<subject matching repo template>" \
   -m "- <Key change or reason 2>"
 ```
 
-`-m` behaves exactly as git's own, and `--amend` / `--no-verify` pass through.
-Add `--no-verify` only where the repository's hook policy calls for it (see the
-handoff contract above), never on your own judgment.
+`-m` behaves exactly as git's own, and `--amend` / `--no-verify` / `--push` pass through.
+If `push.enabled` is active in repository config or `--push` is passed, `agentkit commit-safe commit`
+automatically pushes the commit to the remote.
 
 If the commit is refused as `SECRET_DETECTED`, stop and report it. Only when the
 user confirms the match is a placeholder or a test fixture, re-run naming that
@@ -181,8 +178,6 @@ checked the identity and exported the dates, and a headless runner is granted
 `git`, not `agentkit` — reaching for `agentkit` there gets the call denied and
 the commit never happens. (Should you run it anyway, exported dates are
 inherited rather than re-resolved, so nothing drifts.)
-
-If multiple atomic units exist, repeat Steps 2–3 for each remaining set of changes until the working tree is clean.
 
 ---
 

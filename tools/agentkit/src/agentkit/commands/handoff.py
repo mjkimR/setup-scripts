@@ -101,11 +101,18 @@ def _agy_client_options(func):
         "so agy neither runs nor speculates about tests. Omit if unknown."
     ),
 )
+@click.option(
+    "--push/--no-push",
+    "push",
+    default=None,
+    help="Explicitly enable or disable auto-push after commit. Defaults to repo config if omitted.",
+)
 @_agy_client_options
 @click.pass_context
 def commit(
     ctx: click.Context,
     safe: bool | None,
+    push: bool | None,
     effort: str,
     timeout: str,
     max_units: int,
@@ -144,6 +151,7 @@ def commit(
         verbose=verbose,
         hints=hints,
         tests=tests,
+        push=push,
     )
     ctx.exit(int(result.exit_code))
 

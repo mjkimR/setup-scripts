@@ -497,3 +497,34 @@ def test_a_rejected_hooks_policy_blocks_the_whole_update(repo: Path, monkeypatch
     saved = load_repo_config(cwd=repo)
     assert saved.hooks.policy == "bypass-intermediate"
     assert saved.conventions.language == "en"
+
+
+def test_repo_config_push_defaults(repo: Path) -> None:
+    path = repo_config_path(cwd=repo)
+    cfg = RepoConfig(path=path)
+    assert cfg.push.enabled is False
+    assert cfg.push.remote == ""
+    assert cfg.push.branch == ""
+
+
+def test_repo_config_push_roundtrip(repo: Path) -> None:
+    from agentkit.repoconfig import PushConfig
+
+    path = repo_config_path(cwd=repo)
+    cfg = RepoConfig(path=path, push=PushConfig(enabled=True, remote="origin", branch="main"))
+    save_repo_config(cfg, cwd=repo)
+
+    loaded = load_repo_config(cwd=repo)
+    assert loaded is not None
+    assert loaded.push.enabled is True
+    assert loaded.push.remote == "origin"
+    assert loaded.push.branch == "main"
+
+
+def test_set_push_enabled(repo: Path, monkeypatch) -> None:
+    monkeypatch.chdir(repo)
+    save_repo_config(RepoConfig(path=repo_config_path(cwd=repo)), cwd=repo)
+
+    result = CliRunner().invoke(cli, ["commit", "config", "--set", "push.enabled=true"])
+    assert result.exit_code == 0
+    assert load_repo_config(cwd=repo).push.enabled is True

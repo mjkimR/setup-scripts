@@ -52,6 +52,7 @@ Options worth knowing, all with sane defaults:
 - `--effort low|medium|high` — reasoning effort to ask `agy` for (default `medium`)
 - `--timeout 600s` — passed to `agy`'s own print timeout
 - `--verbose` — also print `agy`'s narration
+- `--push / --no-push` — explicitly enable or disable auto-push to remote (defaults to repo config `push.enabled`)
 
 Two more options carry what only this session knows. Both are optional — skip
 them rather than doing any work to fill them in:
