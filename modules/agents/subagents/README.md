@@ -8,15 +8,19 @@ subagents/
   <role>/
     README.md             # portable job contract and safety boundary
     codex/README.md       # Codex spawn contract and selected model
+    codex/<skill>/        # Codex-only sender skill
     claude/<role>.md      # Claude Code agent definition, installed under ~/.claude/agents/agentkit/
+    claude/<skill>/       # Claude-only sender skill
 ```
 
-`install.sh` currently installs only Claude Code definitions. Claude Code has a
-documented file registry for custom subagents; it recursively discovers Markdown
-files under `~/.claude/agents/`. Codex's native subagents are spawned by the
-active session, with the model selected at that call, rather than loaded from an
-equivalent on-disk role registry. Its `codex/README.md` and the paired sender
-skill therefore form the Codex adapter.
+`install.sh` installs the Claude Code definitions and each provider's sender
+skill. Claude Code has a documented file registry for custom subagents; it
+recursively discovers Markdown files under `~/.claude/agents/`. Codex's native
+subagents are spawned by the active session, with the model selected at that
+call, rather than loaded from an equivalent on-disk role registry. Its
+`codex/README.md` and Codex-only sender skill therefore form the Codex adapter.
+The same skill name may have a separate Claude implementation under `claude/`;
+`install.sh` installs each into that provider's skill directory.
 
 Do not put implementation scripts here. Shared executable policy remains in
 `tools/agentkit/`; skills and subagent files describe when and how to use it.
@@ -30,9 +34,9 @@ Do not put implementation scripts here. Shared executable policy remains in
 3. Add `<role>/claude/<role>.md` when Claude Code should run it. Keep the
    frontmatter description short; it is always loaded, while the body is loaded
    only when the agent runs.
-4. Add or update a sender skill under `modules/agents/skills/` for Codex. Its
-   instructions select the exact `spawn_agent` model and pass the portable
-   contract to the child.
+4. Add a provider-specific sender skill below the adapter. Do not put
+   provider branches in one shared `SKILL.md`: the installer already knows
+   which target it is linking.
 5. Add an installer test using a temporary `HOME` before registering the role
    in user-facing documentation.
 

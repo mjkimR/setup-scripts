@@ -1,7 +1,0 @@
-name: handoff-commit
-description: Delegates an explicitly requested commit workflow to the native Codex or Claude Code commit subagent
-
-targets:
-  - claude
-  - codex
-  # - antigravity   # agy runs git-commit directly; handing off to itself is a loop

@@ -18,6 +18,8 @@ fi
 log_header "Installing / Syncing AI Agent Subagents"
 
 CLAUDE_AGENTS_DIR="$HOME/.claude/agents/agentkit"
+CLAUDE_SKILLS_DIR="$HOME/.claude/skills"
+CODEX_SKILLS_DIR="$HOME/.codex/skills"
 found=0
 
 for definition in "$SCRIPT_DIR"/*/claude/*.md; do
@@ -45,5 +47,32 @@ if [ "$found" -eq 0 ]; then
   log_warn "No Claude Code subagent definitions found in $SCRIPT_DIR."
 fi
 
-log_info "Codex uses the handoff-commit skill to spawn its native commit worker."
+link_skill() { # link_skill <source skill directory> <destination> <label>
+  local source="$1" destination="$2" label="$3"
+  mkdir -p "$(dirname "$destination")"
+  if [ -e "$destination" ] && [ ! -L "$destination" ]; then
+    local backup="${destination}.bak"
+    if [ -e "$backup" ]; then
+      log_warn "  ↳ $destination is a real directory and $backup already exists; skipping ${label}."
+      return
+    fi
+    mv "$destination" "$backup"
+    log_warn "  ↳ Pre-existing $destination moved to $backup"
+  fi
+  ln -sfn "$source" "$destination"
+  log_success "  ↳ Linked ${label}: $destination"
+}
+
+for skill in "$SCRIPT_DIR"/*/claude/*/SKILL.md; do
+  [ -f "$skill" ] || continue
+  source="$(dirname "$skill")"
+  link_skill "$source" "$CLAUDE_SKILLS_DIR/$(basename "$source")" "Claude Code skill"
+done
+
+for skill in "$SCRIPT_DIR"/*/codex/*/SKILL.md; do
+  [ -f "$skill" ] || continue
+  source="$(dirname "$skill")"
+  link_skill "$source" "$CODEX_SKILLS_DIR/$(basename "$source")" "Codex skill"
+done
+
 log_success "AI agent subagents have been synchronized!"

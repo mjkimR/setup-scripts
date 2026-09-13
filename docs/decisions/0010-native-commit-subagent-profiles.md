@@ -29,9 +29,9 @@ truth. A role owns a portable contract and provider adapters. The first role is
 modules/agents/subagents/commit/
   README.md                         portable authority and completion contract
   codex/README.md                   Codex spawn contract (gpt-5.6-luna)
+  codex/handoff-commit/SKILL.md     Codex-only sender skill
   claude/agentkit-commit.md         Claude Code adapter (Sonnet, medium effort)
-modules/agents/skills/handoff-commit/
-                                    shared sender; dispatches to the provider adapter
+  claude/handoff-commit/SKILL.md    Claude-only sender skill
 ```
 
 The subagent runs in the parent's shared checkout. Commit delegation is one
@@ -40,10 +40,11 @@ child invokes `git-commit` directly and reports hashes, verification state, and
 remaining paths. It cannot delegate again, reset, amend unrelated work, change
 policy, or bypass a guard.
 
-`modules/agents/subagents/install.sh` only installs the Claude adapter, as a
-symlink under `~/.claude/agents/agentkit/`. Codex has its own source adapter at
-`commit/codex/README.md` and the sender skill because model selection happens
-through its native spawn call.
+`modules/agents/subagents/install.sh` installs the Claude profile as a symlink
+under `~/.claude/agents/agentkit/`, the Claude sender under
+`~/.claude/skills/`, and the Codex sender under `~/.codex/skills/`. Codex has
+its own source adapter at `commit/codex/README.md` because model selection
+happens through its native spawn call.
 
 The user-facing `handoff-commit` name now belongs to the native route. The
 established Antigravity command stays only as undocumented CLI compatibility

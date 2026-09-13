@@ -1,0 +1,24 @@
+---
+name: handoff-commit
+description: >-
+  Delegate an explicitly requested git commit workflow to the native Claude
+  Code commit subagent. Use only when the user asks to commit.
+disable-model-invocation: true
+---
+
+# Commit Handoff
+
+Delegate to the installed `agentkit-commit` subagent and pass the user's
+explicit commit constraints unchanged. It owns the complete `git-commit`
+workflow in the shared checkout.
+
+While the child runs, do no diff, staging, verification, or commit work in this
+checkout, and do not start another writer. Wait for the child and relay its
+report. A blocker is for the user to decide; never retry automatically.
+
+If `~/.claude/agents/` did not exist when the active Claude Code session
+started, restart Claude Code once after installation so it discovers the
+`agentkit-commit` profile.
+
+Do not run the legacy `agentkit handoff commit`/Antigravity path for the same
+working tree.
