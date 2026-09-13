@@ -35,14 +35,19 @@ setup-scripts/
 
 ## Usage
 
-Simply make the entry point script executable and run it:
+Make the entry point script executable and run the interactive setup wizard:
 
 ```bash
 # Make sure files are executable
-chmod +x setup.sh lib/*.sh modules/terminal/*/install.sh modules/ide/*/install.sh
+chmod +x setup.sh lib/*.sh modules/terminal/*/install.sh modules/ide/*/install.sh modules/agents/*/install.sh
 
-# Run the setup wizard
+# Run the setup wizard (interactive category menu)
 ./setup.sh
+
+# Or jump directly into a specific category:
+./setup.sh --env      # Configure developer environment (Git, NVM, UV, Zsh, VS Code)
+./setup.sh --agents   # Configure AI agents (Skills, Subagents, Notification hooks)
+./setup.sh --all      # Full setup (both Environment and AI agents)
 ```
 
 ### Customizing Configuration Files
@@ -57,8 +62,19 @@ Before running the script, you can adjust the configs inside the `config/` direc
 
 ## Handoff Skills
 
-`modules/agents/skills/install.sh` symlinks each skill into the agents its
-`meta.yaml` names, and installs the CLIs those skills depend on.
+`modules/agents/skills/install.sh` provides an interactive menu allowing you to
+select which skills to install. Each skill declares `default: true` or `default: false`
+in its `meta.yaml` (by default, `git-commit` and `handoff` are pre-selected). You can
+also run it directly:
+
+```bash
+modules/agents/skills/install.sh            # interactive menu (TTY) or default skills
+modules/agents/skills/install.sh --all      # install all skills
+modules/agents/skills/install.sh git-commit # install only specific skill(s)
+```
+
+The installer symlinks each selected skill into the agents its `meta.yaml` names,
+and installs the CLIs those skills depend on.
 
 | Skill | Installed for | What it does |
 |---|---|---|

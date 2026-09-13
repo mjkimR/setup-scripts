@@ -1,5 +1,7 @@
 name: handoff-polish
 description: Hands Markdown copyediting off to the Antigravity CLI (agy) and verifies the outcome from file hashes
+default: false
+
 
 targets:
   - claude

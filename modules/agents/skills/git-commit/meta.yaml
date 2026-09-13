@@ -1,5 +1,7 @@
 name: git-commit
 description: Git commit message generation, inspection, and conventional workflow
+default: true
+
 
 targets:
   - antigravity

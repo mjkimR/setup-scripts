@@ -33,8 +33,11 @@ and consult it before making changes there.
   user configuration, and back up files before destructive replacement.
 - Derive paths from `BASH_SOURCE[0]`, quote paths and expansions, and handle
   macOS and Ubuntu differences explicitly.
-- The `options`, `defaults`, and `scripts` arrays in `setup.sh` are positional.
-  Update all three together when changing module registration.
+- The module arrays in `setup.sh` (`options_env`, `defaults_env`, `scripts_env`
+  and `options_agent`, `defaults_agent`, `scripts_agent`) are positional. Update
+  all three together when changing module registration.
+- Agent skills declare `default: true` or `false` in `meta.yaml` to govern default
+  selection in interactive and non-interactive installations.
 - Respect existing ADRs and add one for significant, durable architecture
   decisions.
 

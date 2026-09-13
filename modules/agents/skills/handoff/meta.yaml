@@ -1,5 +1,7 @@
 name: handoff
 description: Compact the current session into a portable handoff document another agent can pick up
+default: true
+
 
 targets:
   - claude

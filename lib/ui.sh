@@ -34,16 +34,29 @@ multi_select_menu() {
     fi
   done
 
+  # If running in non-interactive environment (not a tty)
+  if [ ! -t 0 ]; then
+    eval "${_msm_out_name}=()"
+    for ((i=0; i<num_options; i++)); do
+      if [ "${checked[i]}" = "true" ]; then
+        eval "${_msm_out_name}+=(\"$i\")"
+      fi
+    done
+    return 0
+  fi
+
   # Save terminal state, hide cursor, and turn off echo
-  local term_state
-  term_state=$(stty -g)
-  tput civis # Hide cursor
-  stty -echo
+  local term_state=""
+  if command -v stty >/dev/null 2>&1; then
+    term_state=$(stty -g 2>/dev/null || true)
+    stty -echo 2>/dev/null || true
+  fi
+  command -v tput >/dev/null 2>&1 && tput civis 2>/dev/null || true
 
   # Restore terminal configuration on script exit (Ctrl+C, termination)
   cleanup_ui() {
-    stty "$term_state"
-    tput cnorm # Show cursor
+    [ -n "$term_state" ] && stty "$term_state" 2>/dev/null || true
+    command -v tput >/dev/null 2>&1 && tput cnorm 2>/dev/null || true
   }
   trap 'cleanup_ui; exit 1' INT TERM
 
@@ -122,5 +135,99 @@ multi_select_menu() {
       eval "${_msm_out_name}+=(\"$i\")"
     fi
   done
+  printf "\n"
+}
+
+# Bash Single-select Menu (TUI)
+# Usage:
+#   source lib/ui.sh
+#   categories=("Option 1" "Option 2" "Option 3")
+#   single_select_menu "Select category:" categories 0 selected_idx
+#   # Outputs selected index into selected_idx variable.
+single_select_menu() {
+  local prompt="$1"
+  local _ssm_options_name="$2"
+  local _ssm_default_idx="${3:-0}"
+  local _ssm_out_name="$4"
+  local -a _ssm_options=()
+  eval "_ssm_options=(\"\${${_ssm_options_name}[@]}\")"
+
+  local num_options=${#_ssm_options[@]}
+  if [ "$num_options" -eq 0 ]; then
+    eval "${_ssm_out_name}=-1"
+    return 0
+  fi
+
+  local active_idx="$_ssm_default_idx"
+  if [ "$active_idx" -lt 0 ] || [ "$active_idx" -ge "$num_options" ]; then
+    active_idx=0
+  fi
+
+  # If running in non-interactive environment (not a tty)
+  if [ ! -t 0 ]; then
+    eval "${_ssm_out_name}=\"$active_idx\""
+    return 0
+  fi
+
+  # Save terminal state, hide cursor, and turn off echo
+  local term_state=""
+  if command -v stty >/dev/null 2>&1; then
+    term_state=$(stty -g 2>/dev/null || true)
+    stty -echo 2>/dev/null || true
+  fi
+  command -v tput >/dev/null 2>&1 && tput civis 2>/dev/null || true
+
+  # Restore terminal configuration on script exit
+  cleanup_ssm_ui() {
+    [ -n "$term_state" ] && stty "$term_state" 2>/dev/null || true
+    command -v tput >/dev/null 2>&1 && tput cnorm 2>/dev/null || true
+  }
+  trap 'cleanup_ssm_ui; exit 1' INT TERM
+
+  draw_single_menu() {
+    printf "\n\033[1;36m%s\033[0m (Arrow keys: Navigate, Enter: Select)\n" "$prompt"
+    for ((i=0; i<num_options; i++)); do
+      if [ $i -eq $active_idx ]; then
+        printf " \033[1;33m➔\033[0m \033[1;33m%s\033[0m\n" "${_ssm_options[i]}"
+      else
+        printf "    %s\n" "${_ssm_options[i]}"
+      fi
+    done
+  }
+
+  draw_single_menu
+
+  while true; do
+    IFS= read -rsn1 key
+
+    if [[ "$key" == $'\x1b' ]]; then
+      IFS= read -rsn2 -t 1 key
+      if [[ "$key" == "[A" ]]; then # Up arrow
+        ((active_idx--))
+        if [ $active_idx -lt 0 ]; then
+          active_idx=$((num_options - 1))
+        fi
+      elif [[ "$key" == "[B" ]]; then # Down arrow
+        ((active_idx++))
+        if [ $active_idx -ge $num_options ]; then
+          active_idx=0
+        fi
+      fi
+    elif [[ "$key" == "" ]] || [[ "$key" == " " ]]; then # Enter or Space
+      break
+    fi
+
+    local lines_to_clear=$((num_options + 2))
+    for ((i=0; i<lines_to_clear; i++)); do
+      printf "\033[A\033[K"
+    done
+
+    draw_single_menu
+  done
+
+  cleanup_ssm_ui
+  trap - INT TERM
+
+  eval "${_ssm_out_name}=\"$active_idx\""
   printf "\n"
 }
