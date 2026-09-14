@@ -20,7 +20,7 @@ branch.
 
 ## Authority and guardrails
 
-- Run the `git-commit` skill directly and follow its repository configuration.
+- Use the `git-commit` skill and follow the repository's commit configuration.
 - Inspect, verify, stage, and commit only as that skill and the user request
   allow.
 - Do not delegate again, push unless explicitly requested or enabled by the

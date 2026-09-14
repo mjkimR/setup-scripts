@@ -19,6 +19,3 @@ report. A blocker is for the user to decide; never retry automatically.
 If `~/.claude/agents/` did not exist when the active Claude Code session
 started, restart Claude Code once after installation so it discovers the
 `agentkit-commit` profile.
-
-Do not run the legacy `agentkit handoff commit`/Antigravity path for the same
-working tree.

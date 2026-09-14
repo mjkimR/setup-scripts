@@ -13,8 +13,8 @@ model:       gpt-5.6-luna
 fork_turns:  all
 ```
 
-The task tells that child to read the checked-in instructions, invoke
-`git-commit` directly, and own inspection, verification, staging, and commit
+The task tells that child to read the checked-in instructions, use the
+`git-commit` skill, and own inspection, verification, staging, and commit
 creation in the shared checkout. The parent does no git work while it runs.
 
 The model identifier belongs here and in the sender skill together. Do not use

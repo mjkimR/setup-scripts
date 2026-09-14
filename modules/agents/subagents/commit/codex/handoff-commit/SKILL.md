@@ -17,8 +17,8 @@ the collaboration tool:
 
 Pass this task, followed by the user's explicit commit constraints:
 
-> You are the commit subagent. Read the repository instructions and invoke the
-> `git-commit` skill directly. Own the complete requested commit workflow in
+> You are the commit subagent. Read the repository instructions and use the
+> `git-commit` skill. Own the complete requested commit workflow in
 > the shared checkout: inspect changes, run required verification, stage, and
 > commit. Do not delegate, push unless requested or repository config enables
 > it, amend/reset, or bypass a guard. Report commit hashes and subjects,
@@ -27,6 +27,3 @@ Pass this task, followed by the user's explicit commit constraints:
 While the child runs, do no diff, staging, verification, or commit work in this
 checkout, and do not start another writer. Wait for the child and relay its
 report. A blocker is for the user to decide; never retry automatically.
-
-Do not run the legacy `agentkit handoff commit`/Antigravity path for the same
-working tree.
