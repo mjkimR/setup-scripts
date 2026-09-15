@@ -43,10 +43,10 @@ the shared git dir, so every worktree of a repository commits under the same set
      - If the prompt lists specific files, stage only those.
      - If the prompt asks for exactly one atomic unit, create a single commit and stop.
      - If commit dates are already exported in the environment, do not resolve or override them:
-       commit with plain `git commit`, which inherits them, not with `agentkit commit-safe commit`.
+       pass them through to `agentkit commit-safe commit`, which inherits them without re-resolving.
      - If the prompt carries caller hints (suggested commit units), use them to group and order the commits — but as advice, not instruction: the diff is the ground truth. Never create an empty or padded commit to match the hint count, never leave a change uncommitted because no hint covers it, and never reuse a hint verbatim as a subject — write subjects to the repository conventions. Report any hint/tree mismatch at the end.
      - If the prompt attests the test-suite state (`passed` / `failed` / `not-run`), trust it: do not run tests, builds, or linters yourself. `failed` is not a reason to hold back commits, and the attestation never goes into a commit message.
-     - If the prompt states a hook policy (`bypass-intermediate`), follow it mechanically: `git commit --no-verify` for every commit that leaves changes uncommitted, plain `git commit` for the one that empties the tree. The policy comes from repo config — never add `--no-verify` on your own judgment, in either direction.
+     - If the prompt states a hook policy (`bypass-intermediate`), follow it mechanically: `agentkit commit-safe commit --no-verify` for every commit that leaves changes uncommitted, and omit `--no-verify` for the one that empties the tree. The policy comes from repo config — never add `--no-verify` on your own judgment, in either direction.
      - Never stop to prompt interactively during a headless run.
 
 ---
@@ -173,11 +173,9 @@ agentkit commit-safe commit --allow-secret path/to/fixture.py -m "<subject>"
 blanket override, and inventing one is not yours to do — a file that needs a
 standing exemption belongs in `guards.allow_paths`, which the user decides.
 
-**In a handoff run, use plain `git commit` instead.** The caller has already
-checked the identity and exported the dates, and a headless runner is granted
-`git`, not `agentkit` — reaching for `agentkit` there gets the call denied and
-the commit never happens. (Should you run it anyway, exported dates are
-inherited rather than re-resolved, so nothing drifts.)
+**In a handoff run, still use `agentkit commit-safe commit`, never plain `git
+commit`.** The runner grants that exact command; it checks the identity and
+guards, and inherits pre-set dates without re-resolving them.
 
 ---
 

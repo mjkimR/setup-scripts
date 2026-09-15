@@ -18,7 +18,8 @@ the collaboration tool:
 Pass this task, followed by the user's explicit commit constraints:
 
 > You are the commit subagent. Read the repository instructions and use the
-> `git-commit` skill. Own the complete requested commit workflow in
+> `git-commit` skill. Create commits with `agentkit commit-safe commit`, never
+> plain `git commit`. Own the complete requested commit workflow in
 > the shared checkout: inspect changes, run required verification, stage, and
 > commit. Do not delegate, push unless requested or repository config enables
 > it, amend/reset, or bypass a guard. Report commit hashes and subjects,

@@ -102,7 +102,7 @@ def test_the_prompt_carries_the_hook_policy(repo, granted, stub_agy, pending_fil
     assert "bypass-intermediate" in prompt
     assert "--no-verify" in prompt
     # The final commit must run hooks; only intermediate ones bypass.
-    assert "plain `git commit`" in prompt
+    assert "agentkit commit-safe commit --no-verify" in prompt
 
 
 def test_a_hand_edited_run_all_policy_stops_the_preflight(repo, granted, stub_agy, pending_file):
@@ -457,15 +457,15 @@ def test_safe_mode_calls_agy_in_single_turn(repo, granted, stub_agy, pending_fil
     assert "Commit ALL pending changes" in stub_agy.calls()[0]["prompt"]
 
 
-def test_safe_mode_stamps_the_commits_it_creates(repo, granted, stub_agy, pending_file, safe_setup):
+def test_safe_mode_leaves_timestamp_resolution_to_the_wrapper(repo, granted, stub_agy, pending_file, safe_setup):
     pending_file("a.txt")
     stub_agy.mode("all")
 
     run(COMMIT_SAFE, repo, stub_agy)
 
-    stamped = stub_agy.calls()[0]["author_date"][:16]
-    logged = gitutil.log("HEAD", "%ad", date_format="%Y-%m-%d %H:%M", cwd=repo)
-    assert logged == [stamped]
+    call = stub_agy.calls()[0]
+    assert call["author_date"] == ""
+    assert "agentkit commit-safe commit -m" in call["prompt"]
 
 
 def test_auto_push_triggers_git_push_when_enabled(repo, granted, stub_agy, pending_file, monkeypatch):
@@ -532,6 +532,16 @@ def test_plain_mode_still_enforces_the_whitelist(repo, granted, stub_agy, pendin
         run(COMMIT, repo, stub_agy)
 
     assert stub_agy.calls() == []
+
+
+def test_the_prompt_forbids_plain_git_commit(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+
+    run(COMMIT, repo, stub_agy)
+
+    prompt = stub_agy.calls()[0]["prompt"]
+    assert "Never run plain\n`git commit`" in prompt
+    assert "agentkit commit-safe commit --plain" in prompt
 
 
 def test_a_stall_after_earlier_commits_is_incomplete_not_failed(repo, granted, stub_agy, pending_file, safe_setup):

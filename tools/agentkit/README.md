@@ -18,7 +18,7 @@ agentkit commit onboard|analyze|config        per-repo config, onboarding, histo
 agentkit commit verify [--only test|lint]     run the repo's verify commands, echoing each first
 agentkit commit-safe commit -m … [--amend]    the checked, stamped `git commit` skills call
 agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
-agentkit handoff commit [--safe/--plain]      delegate committing to the Antigravity CLI
+agentkit handoff commit [--safe/--plain]      delegate a commit via the checked AgentKit wrapper
                         [--hint L]... [--tests S]   advisory commit-unit labels + test attestation
 agentkit handoff work --to agy|codex --doc F  have another agent CLI continue a handoff document
 agentkit handoff prompt --doc F               print the pickup prompt for an interactive session

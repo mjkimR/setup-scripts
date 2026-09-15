@@ -120,7 +120,7 @@ agentkit commit analyze            # inspect detected language, author, and conv
 agentkit commit config             # show or edit repository commit config
 agentkit commit-safe verify        # whitelist + timestamp pre-flight
 agentkit commit-safe commit -m …   # commit, identity checked and timestamp resolved
-agentkit handoff commit [--safe]   # legacy Antigravity compatibility only
+agentkit handoff commit [--safe|--plain]  # legacy Antigravity compatibility, through AgentKit
 agentkit handoff polish [paths…]   # what the polish handoff skill runs
 agentkit handoff polish --list-levels   # the 어체 ladder, L1 개조식 … L5 해요체
 agentkit agy check | agy grant     # the allow-list headless agy needs
@@ -145,7 +145,8 @@ own 어체:
 Patterns match gitignore-style (`**` crosses directories, a bare pattern
 matches the basename) and the first hit wins, so specific rules go first.
 
-`agy` needs `command(git add)`, `command(git commit)` and `command(git ls-files)`
+`agy` needs `command(git add)`, `command(git ls-files)` and
+`command(agentkit commit-safe commit)`
 before the first commit handoff — its runner refuses to start without them —
 and `command(git diff)` for polish runs that scope to a diff (explicit
 whole-file runs need no git grant). `agentkit agy grant` adds the full set.

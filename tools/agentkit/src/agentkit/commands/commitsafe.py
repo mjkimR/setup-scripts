@@ -109,6 +109,11 @@ INHERITED_DATE_VARS = ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE")
 )
 @click.option("--amend", is_flag=True, help="Amend the previous commit rather than creating one.")
 @click.option(
+    "--plain",
+    is_flag=True,
+    help="Use the system clock without resolving or consuming the configured timeline.",
+)
+@click.option(
     "--allow-secret",
     "allow_secret",
     multiple=True,
@@ -135,6 +140,7 @@ def commit(
     ctx: click.Context,
     messages: tuple[str, ...],
     amend: bool,
+    plain: bool,
     no_verify: bool,
     allow_secret: tuple[str, ...],
     push: bool | None,
@@ -157,7 +163,10 @@ def commit(
         click.echo(f"[INFO] {note}")
 
     inherited = [name for name in INHERITED_DATE_VARS if name in os.environ]
-    if inherited:
+    if plain:
+        exports = {}
+        click.echo("[INFO] Date: system clock (--plain)")
+    elif inherited:
         exports: dict[str, str] = {}
         click.echo(f"[INFO] Date: {os.environ[inherited[0]]} (inherited from {', '.join(inherited)})")
     else:
@@ -176,7 +185,11 @@ def commit(
     # -m is required, so git never falls through to an editor and hangs a
     # headless run. Output is inherited: a failing hook has to reach the caller
     # verbatim, not compressed into an advisory.
-    result = subprocess.run(argv, env={**os.environ, **exports})
+    commit_env = {**os.environ, **exports}
+    if plain:
+        for name in INHERITED_DATE_VARS:
+            commit_env.pop(name, None)
+    result = subprocess.run(argv, env=commit_env)
     if result.returncode == 0:
         repo_cfg = load_repo_config()
         should_push = (repo_cfg.push.enabled if repo_cfg else False) if push is None else push

@@ -10,42 +10,45 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..commitsafe import checked_identity, resolve
 from ..repoconfig import load_repo_config
 
-# Permission grants required by git commit handoff tasks.
+# Permission grants required by commit handoff tasks.
 COMMIT_GRANTS: tuple[str, ...] = (
     "command(git add)",
-    "command(git commit)",
     "command(git ls-files)",
+    "command(agentkit commit-safe commit)",
 )
 
 # command(git reset) is deliberately absent. The agent reaches for
 # `git add -N <path> && git diff <path> && git reset <path>` to inspect untracked
 # files, but a prefix rule for `git reset` would also permit `git reset --hard`.
-# The same six verbs _GIT_ONLY spells out in prose, as command prefixes: what
-# the task actually authorizes the receiver to run. A denial outside this set
-# is a prompt bug (the receiver was steered to a command it may never run),
-# not a missing grant — the two need different fixes.
-PERMITTED_GIT_COMMANDS: tuple[str, ...] = tuple(
-    f"git {verb}" for verb in ("log", "diff", "status", "ls-files", "add", "commit")
+# The read/add git commands plus the checked commit wrapper below spell out the
+# task's actual authority. A denial outside this set is a prompt bug (the
+# receiver was steered to a command it may never run), not a missing grant —
+# the two need different fixes.
+PERMITTED_GIT_COMMANDS: tuple[str, ...] = (
+    *(f"git {verb}" for verb in ("log", "diff", "status", "ls-files", "add")),
+    "agentkit commit-safe commit",
 )
 
-_GIT_ONLY = """Only git commands are permitted, and only these: log, diff, status, ls-files,
-add, commit. Anything else — cat, ls, pwd, bash, and notably `git reset` — is
+_GIT_ONLY = """Only these commands are permitted: `git log`, `git diff`, `git status`,
+`git ls-files`, `git add`, and `agentkit commit-safe commit`. Never run plain
+`git commit`. Anything else — cat, ls, pwd, bash, and notably `git reset` — is
 denied, and in a && chain one denied segment kills the whole command. To read an
 untracked file, `git add` it and use `git diff --cached <path>`; never the
 `git add -N` … `git reset` round trip. Never pipe or chain commands (`|`, `&&`,
 `;`): the whole line is checked and grep, head, wc, sed are all denied, so
 `git diff <path> | grep import` dies as a whole — read the plain `git diff`
-output instead. A denial is not a reason to stop: carry on with git and finish
-the job."""
+output instead. A denial is not a reason to stop: carry on with the permitted
+commands and finish the job."""
 
-# Commit rules for both commit tasks. Only git is permitted.
+# Commit rules for both commit tasks.
 _GROUPING_RULES = """Commit rules:
 - Commit all pending changes together in a single commit. Do not split changes into multiple commits.
 - Never run tests, builds or linters — committing is the whole job, and
-  nothing but git is permitted anyway."""
+  nothing beyond the listed commands is permitted.
+- Create the commit with `agentkit commit-safe commit -m "<subject>"`, never
+  plain `git commit`."""
 
 # What the tests attestation authorizes the receiver to assume. The caller
 # vouches for the tree it hands off; the receiver acts on the claim without
@@ -146,8 +149,8 @@ class HandoffTask:
             if repo_cfg.hooks.policy == "bypass-intermediate":
                 hooks_note = (
                     "\nHook policy (bypass-intermediate): a commit that leaves further "
-                    "changes\nuncommitted gets `git commit --no-verify`. The commit that "
-                    "makes the working\ntree clean is a plain `git commit`, so hooks run "
+                    "changes\nuncommitted gets `agentkit commit-safe commit --no-verify`. "
+                    "The commit that makes the working\ntree clean omits `--no-verify`, so hooks run "
                     "once, on the final state.\nThis is configured, not yours to decide — "
                     "never add --no-verify anywhere else.\n"
                 )
@@ -164,26 +167,21 @@ class HandoffTask:
         )
 
 
-def _commit_safe_env() -> tuple[dict[str, str], str]:
-    """Validate the identity and advance the timestamp for one unit."""
-    config, _ = checked_identity()
-    stamp = resolve(config)
-    return stamp.as_env(), f"stamp: {stamp.format()}"
-
-
 COMMIT = HandoffTask(
     name="commit",
     tag="handoff",
     skill="/git-commit",
     grants=COMMIT_GRANTS,
     instructions=(
-        "Commit all pending changes in that repository together in a single commit now.\n"
+        "Commit all pending changes in that repository together in a single commit now, using\n"
+        '`agentkit commit-safe commit --plain -m "<subject>"`.\n'
         "If you cannot tell whether some file belongs in a commit, leave it "
         "uncommitted\nand say so at the end."
     ),
 )
 
-# Safe commit task with timestamp injection (single turn, all pending changes).
+# Safe commit task (single turn, all pending changes). The wrapper resolves
+# and records the timestamp itself, so the receiver never needs plain git.
 COMMIT_SAFE = HandoffTask(
     name="commit-safe",
     tag="handoff-safe",
@@ -192,12 +190,9 @@ COMMIT_SAFE = HandoffTask(
     per_unit=False,
     log_format="%h  %ad  %s",
     date_format="%Y-%m-%d %H:%M:%S",
-    env_factory=_commit_safe_env,
     instructions=(
-        "GIT_AUTHOR_DATE and GIT_COMMITTER_DATE are already set in your "
-        "environment. Do\nNOT resolve or override them — a plain `git add` and "
-        "`git commit` inherits them.\n\n"
-        "Commit ALL pending changes in that repository together in a single commit now."
+        "Commit ALL pending changes in that repository together in a single commit now, using\n"
+        '`agentkit commit-safe commit -m "<subject>"`. It resolves the configured timestamp.'
     ),
 )
 

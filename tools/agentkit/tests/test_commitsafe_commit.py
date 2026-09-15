@@ -54,6 +54,20 @@ def test_a_preset_date_is_inherited_without_consuming_a_stamp(safe_setup, repo, 
     assert not state_path(load_config()).exists()
 
 
+def test_plain_uses_the_system_clock_even_when_dates_are_inherited(safe_setup, repo, pending_file, monkeypatch):
+    pending_file("a.txt")
+    subprocess.run(["git", "add", "a.txt"], cwd=str(repo), check=True)
+    monkeypatch.setenv("GIT_AUTHOR_DATE", "2020-01-02 03:04:05 +0900")
+    monkeypatch.setenv("GIT_COMMITTER_DATE", "2020-01-02 03:04:05 +0900")
+
+    result = CliRunner().invoke(cli, ["commit-safe", "commit", "--plain", "-m", "plain"])
+
+    assert result.exit_code == 0, result.output
+    assert "system clock (--plain)" in result.output
+    assert _log(repo, "%ad") != "Thu Jan 2 03:04:05 2020 +0900"
+    assert not state_path(load_config()).exists()
+
+
 def test_a_rejected_identity_never_reaches_git(safe_setup, repo, pending_file):
     pending_file("a.txt")
     subprocess.run(["git", "add", "a.txt"], cwd=str(repo), check=True)

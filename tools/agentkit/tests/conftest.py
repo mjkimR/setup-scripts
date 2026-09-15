@@ -51,9 +51,9 @@ def granted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                 "permissions": {
                     "allow": [
                         "command(git add)",
-                        "command(git commit)",
                         "command(git ls-files)",
                         "command(git diff)",
+                        "command(agentkit commit-safe commit)",
                     ]
                 }
             }
