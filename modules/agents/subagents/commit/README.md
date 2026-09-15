@@ -9,7 +9,7 @@ the child is running.
 
 ## Inputs
 
-- The user request and any stated scope, message, split, push, or verification
+- The user request and any stated scope, message, push, or verification
   constraints.
 - The repository's checked-in instructions and the installed `git-commit`
   skill.
@@ -31,6 +31,6 @@ branch.
 
 ## Completion signal
 
-Return the commit hash and subject for every commit made, the verification
-outcome, whether anything remains uncommitted, and any blocker. The parent
-relays this result without independently repeating commit work.
+Return the created commit hash and subject, the verification outcome,
+whether anything remains uncommitted, and any blocker. The parent relays this
+result without independently repeating commit work.

@@ -7,7 +7,7 @@ description: >-
 
 # Git Commit Skill
 
-This skill provides operational workflows for inspecting changes, adhering to repository-specific commit conventions and language preferences, splitting changes into atomic commits, and creating clean, consistent commits.
+This skill provides operational workflows for inspecting changes, adhering to repository-specific commit conventions and language preferences, creating a single comprehensive commit, and maintaining clean, consistent commit history.
 
 Configuration is maintained **per-repository** at `<git-dir>/agentkit-commit.json` —
 the shared git dir, so every worktree of a repository commits under the same settings.
@@ -41,12 +41,12 @@ the shared git dir, so every worktree of a repository commits under the same set
 4. **Honor Caller Constraints (Handoff Contract)**:
    - When invoked through `/handoff-commit` or headless runners:
      - If the prompt lists specific files, stage only those.
-     - If the prompt asks for exactly one atomic unit, create a single commit and stop.
+     - Always create a single comprehensive commit covering all specified or pending changes. Do not split changes across multiple commits.
      - If commit dates are already exported in the environment, do not resolve or override them:
        pass them through to `agentkit commit-safe commit`, which inherits them without re-resolving.
-     - If the prompt carries caller hints (suggested commit units), use them to group and order the commits — but as advice, not instruction: the diff is the ground truth. Never create an empty or padded commit to match the hint count, never leave a change uncommitted because no hint covers it, and never reuse a hint verbatim as a subject — write subjects to the repository conventions. Report any hint/tree mismatch at the end.
+     - If the prompt carries caller hints (context on changes made), use them to understand intent and craft the commit message — but the diff is the ground truth. Combine all covered changes into the single commit, and never leave an intended change uncommitted.
      - If the prompt attests the test-suite state (`passed` / `failed` / `not-run`), trust it: do not run tests, builds, or linters yourself. `failed` is not a reason to hold back commits, and the attestation never goes into a commit message.
-     - If the prompt states a hook policy (`bypass-intermediate`), follow it mechanically: `agentkit commit-safe commit --no-verify` for every commit that leaves changes uncommitted, and omit `--no-verify` for the one that empties the tree. The policy comes from repo config — never add `--no-verify` on your own judgment, in either direction.
+     - Follow the repository's hook policy. Do not add `--no-verify` on your own judgment unless explicitly configured or requested.
      - Never stop to prompt interactively during a headless run.
 
 ---
