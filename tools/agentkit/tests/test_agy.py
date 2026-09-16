@@ -130,3 +130,28 @@ def test_pipelines_are_out_of_scope_when_any_segment_is():
     assert outside_scope(["git diff a.py"], permitted) == []
     assert outside_scope(["git diff a.py | grep import"], permitted) == ["git diff a.py | grep import"]
     assert outside_scope(["git log; git show"], permitted) == ["git log; git show"]
+
+
+def test_unsandboxed_candidates_are_not_confirmed_denials(tmp_path):
+    db = tmp_path / "conversation.db"
+    args = {"CommandLine": 'git diff --cached "a b.py"', "BypassSandbox": True}
+    db.write_bytes(
+        b"\x00binary\xff"
+        + json.dumps(args).encode()
+        + b"\x00"
+        + json.dumps(args).encode()
+        + b'{"CommandLine":"git status","BypassSandbox":false}'
+        + b'{"BypassSandbox":true,"CommandLine":123}'
+        + b'{"BypassSandbox":true,broken}'
+    )
+    run = AgyRun(
+        output='a tool required the "unsandboxed" permission that headless mode cannot prompt for',
+        log="",
+        conversation_db=db,
+    )
+    assert run.requires_unsandboxed
+    assert run.unsandboxed_candidates() == [args["CommandLine"]]
+    assert run.denied_commands() == []
+    assert any("not confirmed denied" in line for line in run.evidence())
+    db.unlink()
+    assert run.unsandboxed_candidates() == []

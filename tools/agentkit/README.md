@@ -37,6 +37,10 @@ mode uses medium message reasoning and creates at most one commit. In Codex the
 direct skill sets medium effort on a Luna message worker; other hosts retain their runtime effort if no override is
 available. `/handoff-commit` delegates the whole workflow instead.
 
+Low uses only the supplied inventory and bounded preview for message generation.
+Even when omitted changes are unclear, it forbids further diff, file, or history
+reads and uses broader supported wording instead. It never upgrades modes automatically.
+
 Low always skips agent-run tests, lint, builds, and `agentkit commit verify`,
 regardless of configuration or prior attestations, and reports verification as
 skipped (low mode). Default/high retain the configured verification workflow.
@@ -141,3 +145,27 @@ one unit at a time. The runner itself knows nothing about commits.
 cd tools/agentkit && uv run pytest     # package tests
 tests/run-all.sh                       # repository-wide suites
 ```
+
+### Commit workflow modes
+
+`agentkit handoff commit --mode default` (the CLI default) runs enabled repository
+verification before staging/delegation. Failure stops before agy is started. An explicit
+`--tests` attestation skips duplicate verification. Disabled/unconfigured checks are
+reported as skipped, not passed. The headless receiver never runs verification itself.
+
+`--mode low` always skips runner verification and reports `skipped (low mode)`;
+it overrides supplied attestations with `not-run`. Both modes invoke `/git-commit MODE`
+and request `agentkit commit context --mode MODE` after staging. Low bounds the patch
+while retaining every path; default uses the full staged patch. `--effort` remains a
+separate model setting (medium by default). One commit is expected per handoff;
+unexpected commit counts are reported as incomplete, without pushing or retrying.
+
+Run `agentkit agy grant` to add the read-only context command permission when upgrading.
+The Python runner's omitted mode retains the legacy caller-managed attestation behavior;
+the CLI always passes an explicit workflow mode. Use `--no-push` to override repo push policy.
+
+Headless `unsandboxed` denials are separate from `command(...)` permissions.
+The default `agentkit agy grant` does not grant sandbox bypass. Such failures,
+and denials with no identified command, require evidence review instead of an
+automatic grant/retry. Conversation tool arguments are reported as unconfirmed
+request candidates, never as proof of which command was denied.

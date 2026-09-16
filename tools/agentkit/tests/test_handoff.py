@@ -594,3 +594,85 @@ def test_the_loop_guard_stops_a_runaway_split(repo, granted, stub_agy, pending_f
     assert result.exit_code == ExitCode.INCOMPLETE
     assert len(stub_agy.calls()) == 2
     assert result.remaining
+
+
+@pytest.mark.parametrize("mode", ["low", "default"])
+def test_explicit_mode_reaches_skill_and_context(repo, granted, stub_agy, pending_file, mode):
+    pending_file("a.txt")
+    result = run(COMMIT, repo, stub_agy, mode=mode)
+    assert result.exit_code == ExitCode.OK
+    prompt = stub_agy.calls()[0]["prompt"]
+    assert prompt.startswith(f"/git-commit {mode}\n")
+    assert f"agentkit commit context --mode {mode}" in prompt
+    if mode == "low":
+        assert "Low forbids additional diff, file, or history reads" in prompt
+        assert "even when omitted changes are unclear" in prompt
+        assert "read the plain `git diff`" not in prompt
+        assert "use `git diff --cached <path>`" not in prompt
+    else:
+        assert "Only these commands are permitted: `git log`, `git diff`" in prompt
+
+
+def test_low_skips_failing_verification(repo, granted, stub_agy, pending_file, capsys):
+    pending_file("a.txt")
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "exit 17"
+    save_repo_config(cfg, cwd=repo)
+    assert run(COMMIT, repo, stub_agy, mode="low", tests="passed").exit_code == ExitCode.OK
+    assert "verification: skipped (low mode)" in capsys.readouterr().out
+    assert "did not run tests" in stub_agy.calls()[0]["prompt"]
+
+
+def test_default_failure_prevents_delegation_and_staging(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "exit 17"
+    save_repo_config(cfg, cwd=repo)
+    assert run(COMMIT, repo, stub_agy, mode="default").exit_code == ExitCode.FAILED
+    assert stub_agy.calls() == []
+    assert gitutil.run(["diff", "--cached", "--name-only"], cwd=repo) == ""
+
+
+def test_default_success_is_attested(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "exit 0"
+    save_repo_config(cfg, cwd=repo)
+    assert run(COMMIT, repo, stub_agy, mode="default").exit_code == ExitCode.OK
+    assert "it passed" in stub_agy.calls()[0]["prompt"]
+
+
+def test_attestation_skips_duplicate_default_verification(repo, granted, stub_agy, pending_file):
+    pending_file("a.txt")
+    cfg = load_repo_config(cwd=repo)
+    cfg.verify.test = "exit 17"
+    save_repo_config(cfg, cwd=repo)
+    assert run(COMMIT, repo, stub_agy, mode="default", tests="passed").exit_code == ExitCode.OK
+
+
+@pytest.mark.parametrize("permission", ["unsandboxed", "command"])
+@pytest.mark.parametrize("identified", [False, True])
+def test_permission_diagnosis_does_not_offer_ineffective_retry(
+    repo, granted, stub_agy, pending_file, capsys, monkeypatch, permission, identified
+):
+    from agentkit.agy.client import AgyClient, AgyRun
+
+    pending_file("a.txt")
+    response = AgyRun(
+        output=f'a tool required the "{permission}" permission that headless mode cannot prompt for',
+        log='permission check failed for command "git ls-files --others"' if identified else "",
+    )
+    monkeypatch.setattr(AgyClient, "run", lambda *args, **kwargs: response)
+    result = run(COMMIT, repo, stub_agy)
+    reported = capsys.readouterr().err
+    assert result.exit_code == ExitCode.FAILED
+    assert result.commits == []
+    if permission == "command" and identified:
+        assert "[ACTION] AUTO" in reported
+        assert "agentkit agy grant" in reported
+    else:
+        assert "[ACTION] INTERACTION" in reported
+        assert "[ACTION] AUTO" not in reported
+        assert "[handoff] [FIX]" not in reported
+    if permission == "unsandboxed":
+        assert "Permission type: unsandboxed" in reported

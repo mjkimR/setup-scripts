@@ -70,6 +70,13 @@ def _agy_client_options(func):
 
 @handoff.command("commit")
 @click.option(
+    "--mode",
+    type=click.Choice(["low", "default"]),
+    default="default",
+    show_default=True,
+    help="Commit workflow: low skips verification and bounds context; default verifies before delegation.",
+)
+@click.option(
     "--safe/--plain",
     "safe",
     default=None,
@@ -111,6 +118,7 @@ def _agy_client_options(func):
 @click.pass_context
 def commit(
     ctx: click.Context,
+    mode: str,
     safe: bool | None,
     push: bool | None,
     effort: str,
@@ -152,6 +160,7 @@ def commit(
         hints=hints,
         tests=tests,
         push=push,
+        mode=mode,
     )
     ctx.exit(int(result.exit_code))
 

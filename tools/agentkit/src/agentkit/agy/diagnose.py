@@ -69,6 +69,29 @@ def diagnose_failure(
     """
     if run.hit_permission_wall:
         denied_commands = run.denied_commands()
+        if run.requires_unsandboxed or not denied_commands:
+            return (
+                "agy required unsandboxed permission."
+                if run.requires_unsandboxed
+                else "agy denied permission without identifying the command.",
+                Advisory(
+                    code=ErrorCode.AGY_PERMISSION_DENIED,
+                    actor=Actor.USER,
+                    retry=after_fix,
+                    what_to_report=(
+                        "Review the denied tool and its required permission before retrying. "
+                        "The default grant only adds command permissions; it cannot resolve an unsandboxed denial."
+                        if run.requires_unsandboxed
+                        else "The denied command is unknown; review the evidence before changing permissions or retrying."
+                    ),
+                    details=(
+                        *(f"Denied: {cmd}" for cmd in denied_commands),
+                        *run.evidence(),
+                        left,
+                        "No retry was attempted.",
+                    ),
+                ),
+            )
         out_of_scope = outside_scope(denied_commands, permitted)
         if out_of_scope:
             # `agentkit agy grant` cannot help here: the denied command is one

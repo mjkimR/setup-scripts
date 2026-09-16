@@ -272,10 +272,15 @@ def _run_agy(client: AgyClient, doc: Path, workdir: Path, out: Reporter) -> Work
                 code=ErrorCode.AGY_PERMISSION_DENIED,
                 actor=Actor.USER,
                 retry=Retry.AFTER_FIX,
-                fix="agentkit agy grant",
+                fix=None if run.requires_unsandboxed or not run.denied_commands() else "agentkit agy grant",
                 what_to_report=(
                     "agy auto-denied commands it needed, so the work is likely incomplete. "
                     "Open-ended work may need grants beyond the commit set — ask the user."
+                    + (
+                        " The default grant only adds command permissions, not unsandboxed permissions."
+                        if run.requires_unsandboxed
+                        else ""
+                    )
                 ),
                 details=(*denied, *run.evidence(), "Partial work may exist.", *_resume_hint(doc)),
             ),

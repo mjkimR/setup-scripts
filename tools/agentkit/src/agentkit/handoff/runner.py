@@ -13,6 +13,7 @@ in place, and reports. Deciding whether to retry belongs to the user.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -57,7 +58,10 @@ def run_handoff(
     hints: tuple[str, ...] = (),
     tests: str | None = None,
     push: bool | None = None,
+    mode: str | None = None,
 ) -> HandoffResult:
+    if mode not in (None, "low", "default"):
+        raise ValueError(f"Unsupported commit mode: {mode}")
     out = reporter or Reporter(task.tag)
     root = _preflight(task, client=client, repo=repo)
 
@@ -65,6 +69,26 @@ def run_handoff(
     if not pending:
         out.note("Working tree is clean — nothing to commit. Skipping handoff.")
         return HandoffResult(ExitCode.OK)
+
+    if mode == "low":
+        tests = "not-run"
+        out.note("verification: skipped (low mode)")
+    elif mode == "default" and tests is None:
+        cfg = load_repo_config(cwd=root)
+        commands = cfg.verify.active() if cfg else []
+        for name, command in commands:
+            out.note(f"[verify] $ {command}")
+            verified = subprocess.run(command, shell=True, cwd=root)
+            if verified.returncode:
+                out.error(f"verification: failed ({name}, exit {verified.returncode}); no handoff started")
+                return HandoffResult(ExitCode.FAILED, remaining=gitutil.pending(cwd=root))
+        tests = "passed" if commands else "not-run"
+        out.note("verification: passed" if commands else "verification: skipped (disabled or unconfigured)")
+        # Configured verification may format files, so stage only in the receiver afterwards.
+        pending = gitutil.pending(cwd=root)
+        if not pending:
+            out.note("Working tree is clean after verification; skipping handoff.")
+            return HandoffResult(ExitCode.OK)
 
     # A self-check nudge, not a gate: the receiver cannot run these commands,
     # so an attestation the caller forgot to give is lost for good here.
@@ -88,7 +112,7 @@ def run_handoff(
         )
 
     result = HandoffResult(ExitCode.OK)
-    prompt = task.prompt(root, hints=hints, tests=tests)
+    prompt = task.prompt(root, hints=hints, tests=tests, mode=mode)
 
     while True:
         result.units += 1
@@ -150,6 +174,11 @@ def run_handoff(
             break
         if not result.remaining:
             break
+
+    if mode is not None and not task.per_unit and len(result.commits) != 1:
+        out.error("Expected exactly one commit; inspect the reported commits before continuing. No push attempted.")
+        result.exit_code = ExitCode.INCOMPLETE
+        return result
 
     if result.remaining:
         # A partial commit is an anomaly the caller has to act on, so the reason

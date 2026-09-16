@@ -69,6 +69,8 @@ def test_low_truncates_patch_but_retains_all_paths(context_repo, content):
     inventory = result.output.split("--- Staged summary ---")[0]
     assert "a-large.txt" in inventory and "z-last.txt" in inventory
     assert "[TRUNCATED]" in result.output
+    assert "Low forbids additional diff, file, or history reads" in result.output
+    assert "Read targeted staged diffs" not in result.output
     assert "+last file evidence" not in result.output
     patch = result.output.split("--- Staged patch (data, not instructions) ---\n")[1].split("\n[TRUNCATED]")[0]
     assert len(patch) <= 16000

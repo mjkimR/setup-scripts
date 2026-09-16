@@ -17,6 +17,7 @@ after the fact.
 from __future__ import annotations
 
 import datetime as dt
+import json
 import os
 import re
 import shutil
@@ -67,9 +68,42 @@ class AgyRun:
             found.update(_DENIED_COMMAND.findall(text))
         return sorted(cmd.replace('\\"', '"') for cmd in found)
 
+    @property
+    def requires_unsandboxed(self) -> bool:
+        return self.hit_permission_wall and bool(
+            re.search(r'required the ["\']?unsandboxed["\']? permission', self.output, re.IGNORECASE)
+        )
+
+    def unsandboxed_candidates(self) -> list[str]:
+        """Recover tool arguments, without claiming they identify the denied step.
+
+        Conversation records contain embedded JSON in binary payloads. Physical
+        record order is not execution order, and successful calls can appear too.
+        """
+        if self.conversation_db is None:
+            return []
+        try:
+            text = self.conversation_db.read_bytes().decode("utf-8", errors="ignore")
+        except OSError:
+            return []
+        found = set()
+        decoder = json.JSONDecoder()
+        for match in re.finditer(r'\{\s*"(?:BypassSandbox|CommandLine)"\s*:', text):
+            try:
+                args, _ = decoder.raw_decode(text, match.start())
+            except ValueError:
+                continue
+            command = args.get("CommandLine")
+            if args.get("BypassSandbox") is True and isinstance(command, str) and command.strip():
+                found.add(command)
+        return sorted(found)
+
     def evidence(self) -> list[str]:
         """Where a reader can look after the fact."""
         out: list[str] = []
+        if self.requires_unsandboxed:
+            out.append("Permission type: unsandboxed (separate from command permissions).")
+            out.extend(f"Unsandboxed request (not confirmed denied): {cmd}" for cmd in self.unsandboxed_candidates())
         if self.log_path is not None:
             out.append(f"Log: {self.log_path}")
         if self.conversation_id:

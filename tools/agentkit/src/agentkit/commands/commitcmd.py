@@ -179,7 +179,8 @@ def commit_context(ctx: click.Context, mode: str) -> None:
         click.echo(
             f"\n[TRUNCATED] Showing {len(preview)} of {len(patch)} patch characters. "
             "The path inventory above is complete; omitted changes are not reviewed. "
-            "Read targeted staged diffs if needed before writing the message."
+            "Low forbids additional diff, file, or history reads. "
+            "Write a broad message from the supplied inventory and preview without inferring unseen details."
         )
 
 
