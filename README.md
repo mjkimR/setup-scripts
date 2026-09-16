@@ -78,7 +78,7 @@ and installs the CLIs those skills depend on.
 
 | Skill | Installed for | What it does |
 |---|---|---|
-| `git-commit` | Antigravity, Claude Code, Codex | Unified commit workflow: per-repository onboarding, language/template detection, atomic commits, whitelist & timeline controls, and pre-commit guardrails (protected branches, staged-secret scan). |
+| `git-commit` | Antigravity, Claude Code, Codex | Single-commit workflow with low/default/high modes, staged context, repository conventions, and checked commit guards. |
 | `git-commit-revise` | Antigravity | Review, critique, and propose revisions for commit messages or amend latest commits. |
 | `handoff-commit` | Claude Code, Codex | Delegates an explicitly requested commit to a native worker: Codex spawns `gpt-5.6-luna`; Claude Code uses the installed Sonnet profile. |
 | `polish-doc` | Antigravity | Copyedits Markdown prose into natural Korean at a chosen 어체, scoped to the changed regions; protects code, links, and structure. |
@@ -154,8 +154,8 @@ whole-file runs need no git grant). `agentkit agy grant` adds the full set.
 For `--safe`, the first commit of a day lands on a random point inside the
 configured window; later commits advance by the real time that actually passed,
 with a minimum gap so a batch never collapses onto one timestamp. See
-`modules/agents/skills/git-commit-safe/references/onboard.md` for the config
-schema, `tools/agentkit/README.md` for the package layout, and
+`modules/agents/skills/git-commit/references/onboarding.md` for repository
+configuration setup, `tools/agentkit/README.md` for the package layout, and
 `docs/decisions/` for why the handoff is shaped this way.
 
 ---

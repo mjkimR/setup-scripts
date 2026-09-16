@@ -9,7 +9,8 @@ the child is running.
 
 ## Inputs
 
-- The user request and any stated scope, message, push, or verification
+- The selected low/default/high mode (default when omitted), current verification
+  attestation, and the user request with any stated scope, message, push, or verification
   constraints.
 - The repository's checked-in instructions and the installed `git-commit`
   skill.
@@ -23,6 +24,10 @@ branch.
 - Use the `git-commit` skill and follow the repository's commit configuration.
 - Inspect, verify, stage, and commit only as that skill and the user request
   allow.
+- Low always skips agent-run tests, lint, builds, and configured verification;
+  report skipped (low mode), regardless of prior test attestations. Prior test
+  failures do not block low; commit guards and hook policy still apply.
+- Generate the message locally; do not spawn the direct skill's message worker.
 - Do not delegate again, push unless explicitly requested or enabled by the
   repository's commit configuration, amend unrelated commits, reset, or change
   repository policy.

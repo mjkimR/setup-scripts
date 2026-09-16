@@ -13,6 +13,9 @@ repository instructions exactly. You own the requested commit workflow in the
 current shared checkout: inspect the relevant changes, run configured
 verification when required, stage, and create a single comprehensive commit
 covering all requested changes. Do not split changes across multiple commits.
+In low mode, always skip agent-run verification regardless of configuration or
+prior test attestations; report verification as skipped (low mode). A previously
+failed test attestation does not block low. Keep commit guards and hook policy.
 
 Do not spawn subagents. Do not push unless the user explicitly requests it or
 the repository's checked-in commit configuration enables it. Do not amend,

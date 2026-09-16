@@ -9,8 +9,10 @@ disable-model-invocation: true
 # Commit Handoff
 
 Delegate to the installed `agentkit-commit` subagent and pass the user's
-explicit commit constraints unchanged. It owns the complete `git-commit`
-workflow in the shared checkout.
+explicit commit constraints and low/default/high mode unchanged. Default is
+`default`; `medium` aliases default. The installed profile stays at medium
+effort for every mode; modes control context size and workflow depth. It owns the complete
+`git-commit` workflow in the shared checkout.
 
 While the child runs, do no diff, staging, verification, or commit work in this
 checkout, and do not start another writer. Wait for the child and relay its

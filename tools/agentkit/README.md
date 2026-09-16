@@ -15,6 +15,7 @@ uv tool install --editable tools/agentkit
 
 ```text
 agentkit commit onboard|analyze|config        per-repo config, onboarding, history analysis
+agentkit commit context [--mode low|default|high]  conventions + staged diff; no mutations
 agentkit commit verify [--only test|lint]     run the repo's verify commands, echoing each first
 agentkit commit-safe commit -m … [--amend]    the checked, stamped `git commit` skills call
 agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
@@ -27,6 +28,26 @@ agentkit agy check|grant                      the allow-list headless agy needs
 agentkit git summary                          working tree overview
 agentkit scratch path|onboard|clean           per-repo scratch space for agent working files
 ```
+
+## Single-commit modes
+
+`/git-commit low` uses a bounded staged patch preview; `/git-commit` uses the full
+staged patch; `/git-commit high` permits additional targeted inspection. Every
+mode uses medium message reasoning and creates at most one commit. In Codex the
+direct skill sets medium effort on a Luna message worker; other hosts retain their runtime effort if no override is
+available. `/handoff-commit` delegates the whole workflow instead.
+
+Low always skips agent-run tests, lint, builds, and `agentkit commit verify`,
+regardless of configuration or prior attestations, and reports verification as
+skipped (low mode). Default/high retain the configured verification workflow.
+Commit guards and configured Git hooks still apply in every mode.
+
+After staging the intended scope, `agentkit commit context` prints the repository
+conventions, all staged paths, summary, and patch. Low limits only the patch to
+200 lines / 16,000 characters and explicitly marks omitted content. Default/high
+print the full patch. The command requires onboarding and a nonempty index, runs
+from the repository root even when invoked in a subdirectory, and never stages,
+verifies, commits, or launches an LLM. The skill owns those steps.
 
 ## Commit message cleanup
 
