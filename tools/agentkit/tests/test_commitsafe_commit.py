@@ -10,6 +10,7 @@ import json
 import subprocess
 from pathlib import Path
 
+import pytest
 from click.testing import CliRunner
 
 from agentkit.cli import cli
@@ -37,6 +38,70 @@ def test_it_commits_and_stamps_the_configured_window(safe_setup, repo, pending_f
     assert _log(repo, "%b").strip() == "- body"
     hour = int(_log(repo, "%ad").split()[3].split(":")[0])
     assert 9 <= hour <= 18, _log(repo, "%ad")
+
+
+@pytest.mark.parametrize(
+    ("configured", "flags", "removed"),
+    [
+        (None, [], True),
+        (True, [], True),
+        (False, [], False),
+        (True, ["--no-strip-co-authored-by"], False),
+        (False, ["--strip-co-authored-by"], True),
+        (None, ["--no-strip-co-authored-by"], False),
+    ],
+)
+def test_co_author_cleanup_config_and_overrides(safe_setup, repo, pending_file, configured, flags, removed):
+    from agentkit.repoconfig import ConventionConfig, RepoConfig, WhitelistConfig, repo_config_path, save_repo_config
+
+    if configured is not None:
+        save_repo_config(
+            RepoConfig(
+                path=repo_config_path(cwd=repo),
+                whitelist=WhitelistConfig(allowed_emails=["test@example.com"]),
+                conventions=ConventionConfig(strip_co_authored_by=configured),
+            ),
+            cwd=repo,
+        )
+    pending_file("a.txt")
+    subprocess.run(["git", "add", "a.txt"], cwd=str(repo), check=True)
+    result = CliRunner().invoke(
+        cli,
+        [
+            "commit-safe",
+            "commit",
+            *flags,
+            "-m",
+            "subject",
+            "-m",
+            "Body mentions Co-Authored-By: as text.\n\nCo-Authored-By: First <first@example.com>",
+            "-m",
+            "  co-authored-by: Second <second@example.com>\nSigned-off-by: Test <test@example.com>",
+            "-m",
+            "Co-Authored-By: Third <third@example.com>",
+        ],
+    )
+
+    assert result.exit_code == 0, result.output
+    message = _log(repo, "%B")
+    assert "Body mentions Co-Authored-By: as text." in message
+    assert "Signed-off-by: Test <test@example.com>" in message
+    for email in ("first@example.com", "second@example.com", "third@example.com"):
+        assert (email not in message) is removed
+    if removed:
+        assert message == (
+            "subject\n\nBody mentions Co-Authored-By: as text.\n\nSigned-off-by: Test <test@example.com>"
+        )
+
+
+def test_co_author_only_message_does_not_create_an_empty_commit(safe_setup, repo, pending_file):
+    pending_file("a.txt")
+    subprocess.run(["git", "add", "a.txt"], cwd=str(repo), check=True)
+
+    result = CliRunner().invoke(cli, ["commit-safe", "commit", "-m", "Co-Authored-By: Test <test@example.com>"])
+
+    assert result.exit_code != 0
+    assert subprocess.run(["git", "rev-parse", "--verify", "HEAD"], cwd=repo, capture_output=True).returncode != 0
 
 
 def test_a_preset_date_is_inherited_without_consuming_a_stamp(safe_setup, repo, pending_file, monkeypatch):
@@ -100,10 +165,13 @@ def test_amend_rewrites_rather_than_adding_a_commit(safe_setup, repo, pending_fi
     subprocess.run(["git", "add", "a.txt"], cwd=str(repo), check=True)
     CliRunner().invoke(cli, ["commit-safe", "commit", "-m", "first"])
 
-    result = CliRunner().invoke(cli, ["commit-safe", "commit", "--amend", "-m", "revised"])
+    result = CliRunner().invoke(
+        cli, ["commit-safe", "commit", "--amend", "-m", "revised\n\nCo-Authored-By: Test <test@example.com>"]
+    )
 
     assert result.exit_code == 0, result.output
     assert _log(repo, "%s") == "revised"
+    assert _log(repo, "%B") == "revised"
     count = subprocess.run(
         ["git", "rev-list", "--count", "HEAD"], cwd=str(repo), capture_output=True, text=True, check=True
     )

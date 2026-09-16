@@ -16,7 +16,8 @@ from ..commitsafe import (
     resolve,
     write_default_config,
 )
-from ..repoconfig import load_repo_config
+from ..commitsafe.message import strip_co_authored_by as clean_co_authors
+from ..repoconfig import ConventionConfig, load_repo_config
 
 
 @click.group("commit-safe")
@@ -109,6 +110,11 @@ INHERITED_DATE_VARS = ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE")
 )
 @click.option("--amend", is_flag=True, help="Amend the previous commit rather than creating one.")
 @click.option(
+    "--strip-co-authored-by/--no-strip-co-authored-by",
+    default=None,
+    help="Remove Co-Authored-By lines from supplied messages. Defaults to repo config (on).",
+)
+@click.option(
     "--plain",
     is_flag=True,
     help="Use the system clock without resolving or consuming the configured timeline.",
@@ -144,6 +150,7 @@ def commit(
     no_verify: bool,
     allow_secret: tuple[str, ...],
     push: bool | None,
+    strip_co_authored_by: bool | None,
 ) -> None:
     """Check the identity, resolve the timestamp, and run `git commit`.
 
@@ -159,6 +166,11 @@ def commit(
     this cannot also become a way to run arbitrary shell.
     """
     config, _ = checked_identity()
+    repo_cfg = load_repo_config()
+    conventions = repo_cfg.conventions if repo_cfg else ConventionConfig()
+    should_strip = conventions.strip_co_authored_by if strip_co_authored_by is None else strip_co_authored_by
+    if should_strip:
+        messages = tuple(clean_co_authors(message) for message in messages)
     for note in check_guards(load_guards(), allow_secret=allow_secret):
         click.echo(f"[INFO] {note}")
 
@@ -191,7 +203,6 @@ def commit(
             commit_env.pop(name, None)
     result = subprocess.run(argv, env=commit_env)
     if result.returncode == 0:
-        repo_cfg = load_repo_config()
         should_push = (repo_cfg.push.enabled if repo_cfg else False) if push is None else push
         if should_push:
             push_argv = ["git", "push"]

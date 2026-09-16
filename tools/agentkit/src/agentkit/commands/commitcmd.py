@@ -121,6 +121,7 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
     )
     click.echo(f"  Language:    {cfg.conventions.language}")
     click.echo(f"  Style:       {cfg.conventions.style}")
+    click.echo(f"  Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
     click.echo(f"  Hooks:       {cfg.hooks.policy}")
     click.echo(
         f"  Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
@@ -194,6 +195,12 @@ def verify(ctx: click.Context, only: str | None) -> None:
 @click.option("--timeline/--no-timeline", default=None, help="Enable or disable commit timestamp resolution.")
 @click.option("--language", type=click.Choice(["ko", "en"]), default=None, help="Preferred commit language.")
 @click.option("--style", default=None, help="Commit style (conventional, bracketed, ticket, custom).")
+@click.option(
+    "--strip-co-authored-by/--no-strip-co-authored-by",
+    default=True,
+    show_default=True,
+    help="Remove Co-Authored-By lines from supplied commit messages.",
+)
 @click.option("--email", "emails", multiple=True, help="Allowed whitelist email(s). Can be specified multiple times.")
 @click.option("--start", default=None, help=f"Timeline start time (HH:MM). [default: {DEFAULT_START}]")
 @click.option("--end", default=None, help=f"Timeline end time (HH:MM). [default: {DEFAULT_END}]")
@@ -248,6 +255,7 @@ def onboard(
     timeline: bool | None,
     language: str | None,
     style: str | None,
+    strip_co_authored_by: bool,
     emails: tuple[str, ...],
     start: str | None,
     end: str | None,
@@ -297,6 +305,7 @@ def onboard(
             language=final_lang,
             style=final_style,
             template=final_template,
+            strip_co_authored_by=strip_co_authored_by,
         ),
         hooks=HooksConfig(policy=final_hooks_policy),
         verify=VerifyConfig(
@@ -321,6 +330,7 @@ def onboard(
     )
     click.echo(f"  • Language:    {cfg.conventions.language}")
     click.echo(f"  • Style:       {cfg.conventions.style}")
+    click.echo(f"  • Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
     click.echo(f"  • Hooks:       {cfg.hooks.policy}")
     click.echo(
         f"  • Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "

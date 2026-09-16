@@ -28,6 +28,27 @@ agentkit git summary                          working tree overview
 agentkit scratch path|onboard|clean           per-repo scratch space for agent working files
 ```
 
+## Commit message cleanup
+
+`agentkit commit-safe commit` removes `Co-Authored-By:` lines from supplied
+`-m` messages by default, including repeated paragraphs and `--amend` messages.
+Matching ignores case and leading spaces; other text and trailers are preserved.
+Repositories with no config, or older configs without this setting, also default
+to removal.
+
+```bash
+# Keep co-author lines for this repository (after onboarding).
+agentkit commit config --set conventions.strip_co_authored_by=false
+
+# Override the repository setting for one commit.
+agentkit commit-safe commit --no-strip-co-authored-by -m '…'
+agentkit commit-safe commit --strip-co-authored-by -m '…'
+```
+
+Onboarding also accepts `--strip-co-authored-by` (default) or
+`--no-strip-co-authored-by`. Cleanup applies to the supplied messages before Git
+runs; it does not rewrite existing history or text added later by Git hooks.
+
 ## Scratch space
 
 Skills that need somewhere to put working files (handoff documents, reports,

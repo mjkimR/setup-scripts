@@ -54,6 +54,7 @@ class ConventionConfig:
     style: str = "conventional"  # "conventional", "bracketed", "ticket", "freeform"
     template: str = "<type>(<scope>): <subject>\n\n<summary>\n- <bullet point 1>\n- <bullet point 2>"
     rules: list[str] = field(default_factory=list)
+    strip_co_authored_by: bool = True
 
 
 # "bypass-intermediate": commits that leave further changes uncommitted use
@@ -298,6 +299,7 @@ class RepoConfig:
                     "<type>(<scope>): <subject>\n\n<summary>\n- <bullet point 1>\n- <bullet point 2>",
                 ),
                 rules=list(conventions_data.get("rules", [])),
+                strip_co_authored_by=conventions_data.get("strip_co_authored_by", True),
             ),
             hooks=HooksConfig(
                 policy=hooks_data.get("policy", DEFAULT_HOOKS_POLICY),

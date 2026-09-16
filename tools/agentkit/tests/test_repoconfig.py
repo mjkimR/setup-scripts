@@ -150,6 +150,7 @@ def test_commit_cli_onboard_and_config(repo: Path, monkeypatch) -> None:
     loaded = load_repo_config(cwd=repo)
     assert loaded is not None
     assert loaded.conventions.language == "en"
+    assert loaded.conventions.strip_co_authored_by is True
     assert loaded.timeline.enabled is False
 
 
@@ -170,6 +171,7 @@ def test_repo_config_migration_and_backfill(repo: Path) -> None:
     assert loaded.timeline.enabled is False
     assert loaded.timeline.start == "09:00"
     assert loaded.conventions.language == "en"
+    assert loaded.conventions.strip_co_authored_by is True
     # Pre-hooks/verify configs get the safe defaults
     assert loaded.hooks.policy == "bypass-intermediate"
     assert loaded.verify.configured() == []
@@ -528,3 +530,21 @@ def test_set_push_enabled(repo: Path, monkeypatch) -> None:
     result = CliRunner().invoke(cli, ["commit", "config", "--set", "push.enabled=true"])
     assert result.exit_code == 0
     assert load_repo_config(cwd=repo).push.enabled is True
+
+
+def test_co_author_cleanup_onboarding_and_config(repo: Path, monkeypatch) -> None:
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["commit", "onboard"])
+    assert result.exit_code == 0, result.output
+    assert load_repo_config(cwd=repo).conventions.strip_co_authored_by is True
+
+    result = runner.invoke(cli, ["commit", "config", "--set", "conventions.strip_co_authored_by=false"])
+    assert result.exit_code == 0, result.output
+    assert "Strip co-authors: [OFF]" in result.output
+    assert load_repo_config(cwd=repo).conventions.strip_co_authored_by is False
+
+    result = runner.invoke(cli, ["commit", "onboard", "--force", "--no-strip-co-authored-by"])
+    assert result.exit_code == 0, result.output
+    assert load_repo_config(cwd=repo).conventions.strip_co_authored_by is False
