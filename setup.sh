@@ -20,6 +20,7 @@ show_help() {
   echo ""
   echo "Options:"
   echo "  --env, env        Configure developer environment (Git, NVM, UV, Zsh, VS Code)"
+  echo "  --terminal       Install all registered terminal tools without configuration prompts"
   echo "  --agents, agents  Configure AI agents (Skills, Subagents, Notification hooks)"
   echo "  --all, all        Configure both developer environment and AI agents"
   echo "  -h, --help        Show this help message"
@@ -31,6 +32,9 @@ if [ $# -gt 0 ]; then
   case "$1" in
     --env|env)
       MODE="env"
+      ;;
+    --terminal)
+      MODE="terminal"
       ;;
     --agents|agents)
       MODE="agents"
@@ -57,6 +61,10 @@ OS_TYPE=$(get_os)
 log_info "Detected OS environment: ${BOLD}${OS_TYPE}${NC}"
 
 if [ "$OS_TYPE" = "unknown" ]; then
+  if [ "$MODE" = "terminal" ]; then
+    log_error "Unsupported OS for terminal installation."
+    exit 1
+  fi
   log_warn "Unknown or unsupported OS environment. Unexpected issues may occur."
   read -rp "Do you want to proceed anyway? (y/N): " continue_unknown
   case "$continue_unknown" in
@@ -70,7 +78,10 @@ options_env=(
   "Install & Configure Git"
   "Install NVM (Node Version Manager) & Node 24"
   "Install Astral UV (Python Package Manager)"
-  "Configure Oh My Zsh & plugins"
+  "Install just (command runner)"
+  "Install ripgrep (rg)"
+  "Install Microsoft APM (Agent Package Manager)"
+  "Optional terminal addon: Zsh, Oh My Zsh & plugins"
   "Sync VS Code/Cursor/VSCodium configs & extensions"
 )
 
@@ -78,6 +89,9 @@ defaults_env=(
   "true"  # Git
   "true"  # NVM
   "true"  # UV
+  "true"  # just
+  "true"  # ripgrep
+  "true"  # APM
   "false" # Oh My Zsh
   "true"  # IDE Settings
 )
@@ -86,7 +100,10 @@ scripts_env=(
   "$SCRIPT_DIR/modules/terminal/git/install.sh"
   "$SCRIPT_DIR/modules/terminal/nvm/install.sh"
   "$SCRIPT_DIR/modules/terminal/uv/install.sh"
-  "$SCRIPT_DIR/modules/terminal/zsh/install.sh"
+  "$SCRIPT_DIR/modules/terminal/just/install.sh"
+  "$SCRIPT_DIR/modules/terminal/ripgrep/install.sh"
+  "$SCRIPT_DIR/modules/terminal/apm/install.sh"
+  "$SCRIPT_DIR/modules/terminal-addons/zsh/install.sh"
   "$SCRIPT_DIR/modules/ide/vscode/install.sh"
 )
 
@@ -129,6 +146,18 @@ fi
 
 # Execute according to chosen mode
 case "$MODE" in
+  terminal)
+    # Use the wizard registration; optional addons live outside terminal/.
+    export SETUP_INSTALL_ONLY=1
+    export PATH="$PATH:$HOME/.local/bin"
+    for script_path in "${scripts_env[@]}"; do
+      case "$script_path" in
+        "$SCRIPT_DIR"/modules/terminal/*/install.sh)
+          bash "$script_path" || exit "$?"
+          ;;
+      esac
+    done
+    ;;
   env)
     run_selected_modules "Select environment tools to install/configure:" options_env defaults_env scripts_env
     ;;

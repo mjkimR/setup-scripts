@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 
+set -eo pipefail
+
 # Load utils.sh relative to script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
@@ -22,16 +24,21 @@ else
     brew install git
   elif [ "$OS_TYPE" = "ubuntu" ]; then
     sudo_keepalive
-    sudo apt-get update && sudo apt-get install -y git
+    sudo apt-get update
+    sudo apt-get install -y git
   else
     log_error "Unsupported OS or package manager not found. Please install Git manually."
     exit 1
   fi
 fi
 
+if [ "${SETUP_INSTALL_ONLY:-0}" = "1" ]; then
+  exit 0
+fi
+
 # Check and guide Git global configuration
-current_name=$(git config --global user.name)
-current_email=$(git config --global user.email)
+current_name=$(git config --global user.name || true)
+current_email=$(git config --global user.email || true)
 
 log_info "Current Git Configuration:"
 log_info "  user.name : ${current_name:-[Not Set]}"
@@ -59,8 +66,8 @@ if [ "$reconfigure" = true ]; then
   fi
 
   log_success "Git configuration updated:"
-  log_info "  user.name : $(git config --global user.name)"
-  log_info "  user.email: $(git config --global user.email)"
+  log_info "  user.name : $(git config --global user.name || true)"
+  log_info "  user.email: $(git config --global user.email || true)"
 else
   log_info "Keeping existing Git configuration."
 fi

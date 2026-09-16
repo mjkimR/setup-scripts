@@ -8,6 +8,7 @@ An interactive, terminal-based (TUI) setup tool for automating the configuration
 - **Cohesive Modular Design**: Every tool is packaged in its own directory under `modules/` (e.g. `git/`, `nvm/`), grouping Linux/macOS installers (`install.sh`) and future Windows installers (`install.ps1`) together.
 - **Git Installer & Configurer**: Installs Git and configures global credentials dynamically.
 - **NVM & Node 24**: Sets up Node Version Manager and configures Node.js v24 LTS as the default.
+- **just, ripgrep, Microsoft APM**: Installs the command runner, `rg` search tool, and [Agent Package Manager](https://github.com/microsoft/apm). Existing commands are skipped. macOS uses Homebrew; Ubuntu uses apt for ripgrep and the official installers for just and APM.
 - **Astral UV**: Installs the high-performance Python package manager.
 - **Zsh & Oh My Zsh**: Performs unattended setup of Zsh, Oh My Zsh, and installs helper plugins (`zsh-autosuggestions`, `zsh-syntax-highlighting`).
 - **IDE Sync (VS Code, Cursor, VSCodium)**: Auto-detects installed editors, backs up existing configurations, copies preset settings/keybindings, and auto-installs plugins listed in `extensions.txt`.
@@ -39,16 +40,28 @@ Make the entry point script executable and run the interactive setup wizard:
 
 ```bash
 # Make sure files are executable
-chmod +x setup.sh lib/*.sh modules/terminal/*/install.sh modules/ide/*/install.sh modules/agents/*/install.sh
+chmod +x setup.sh lib/*.sh modules/terminal/*/install.sh modules/terminal-addons/*/install.sh modules/ide/*/install.sh modules/agents/*/install.sh
 
 # Run the setup wizard (interactive category menu)
 ./setup.sh
 
 # Or jump directly into a specific category:
+./setup.sh --terminal # Install ALL registered terminal tools, without configuration prompts
 ./setup.sh --env      # Configure developer environment (Git, NVM, UV, Zsh, VS Code)
 ./setup.sh --agents   # Configure AI agents (Skills, Subagents, Notification hooks)
 ./setup.sh --all      # Full setup (both Environment and AI agents)
 ```
+
+`--terminal` runs every required tool registered under `modules/terminal/`:
+Git, NVM and Node 24, UV, just, ripgrep, and APM. It skips installed tools
+(including Node 24), preserves Git identity, and stops on installation failure.
+`workbench init` uses this mode.
+
+Optional Zsh, Oh My Zsh, and plugins live separately under
+`modules/terminal-addons/zsh/`. Select this addon in `--env` or `--all`, or run
+`bash modules/terminal-addons/zsh/install.sh` directly. Terminal-only installation
+does not run addons, IDE settings, or agent modules.
+On Ubuntu, ensure `~/.local/bin` is on your shell's PATH for just and APM.
 
 ### Customizing Configuration Files
 
