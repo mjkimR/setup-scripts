@@ -215,8 +215,7 @@ echo ""
 # Skills are documentation; anything they need to *do* lives in a uv tool under
 # tools/. A PATH command is the only reference that resolves identically from
 # Claude Code, Codex and Antigravity, which install skills to three different
-# places — so every package here is installed, not just the one skill in front
-# of us.
+# places. Only agentkit belongs to this installer; personal CLIs are opt-in.
 
 if has_cmd uv; then
   UV_BIN="uv"
@@ -226,7 +225,7 @@ else
   UV_BIN=""
 fi
 
-for tool_dir in "$PROJECT_ROOT"/tools/*/; do
+for tool_dir in "$PROJECT_ROOT"/tools/agentkit/; do
   [ -f "${tool_dir}pyproject.toml" ] || continue
   tool_name="$(basename "${tool_dir%/}")"
 

@@ -176,6 +176,19 @@ configuration setup, `tools/agentkit/README.md` for the package layout, and
 
 ---
 
+## Personal Developer CLI
+
+`devkit` provides diff attachments and commit/review prompts for manual use in
+an AI chat, independently of agentkit and the agent skill installer.
+
+```sh
+uv tool install --editable tools/devkit
+devkit copy-diff
+devkit prompt review --last -l Korean
+```
+
+See [tools/devkit/README.md](tools/devkit/README.md) for options and clipboard support.
+
 ## Quality Checks & Tests
 
 ```bash

@@ -75,4 +75,17 @@ run_installer git-commit
   exit 1
 }
 
+# Personal tools must not be pulled in by the agent skill installer.
+mkdir -p "$test_home/.local/bin"
+cat > "$test_home/.local/bin/uv" <<'STUB'
+#!/bin/sh
+printf '%s\n' "$*" >> "$HOME/uv-calls"
+STUB
+chmod +x "$test_home/.local/bin/uv"
+run_installer
+if ! grep -q 'tools/agentkit' "$test_home/uv-calls" || grep -q 'tools/devkit' "$test_home/uv-calls"; then
+  echo "FAIL: skill CLI installation must include agentkit only" >&2
+  exit 1
+fi
+
 echo "PASS: skills installer respects defaults, accepts specific selections, and backs up existing directories"
