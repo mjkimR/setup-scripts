@@ -53,7 +53,8 @@ chmod +x setup.sh lib/*.sh modules/terminal/*/install.sh modules/terminal-addons
 ```
 
 `--terminal` runs every required tool registered under `modules/terminal/`:
-Git, NVM and Node 24, UV, just, ripgrep, and APM. It skips installed tools
+Git, NVM and Node 24, UV, just, ripgrep, APM, GitHub CLI (`gh`), Google Cloud CLI
+(`gcloud`), and Docker with Compose. It skips installed tools
 (including Node 24), preserves Git identity, and stops on installation failure.
 `workbench init` uses this mode.
 
@@ -61,7 +62,9 @@ Optional Zsh, Oh My Zsh, and plugins live separately under
 `modules/terminal-addons/zsh/`. Select this addon in `--env` or `--all`, or run
 `bash modules/terminal-addons/zsh/install.sh` directly. Terminal-only installation
 does not run addons, IDE settings, or agent modules.
-On Ubuntu, ensure `~/.local/bin` is on your shell's PATH for just and APM.
+On Ubuntu, ensure `~/.local/bin` is on your shell's PATH for just and APM,
+and `/snap/bin` for gcloud. See [terminal tools](modules/terminal/README.md)
+for installation methods and post-install setup.
 
 ### Customizing Configuration Files
 

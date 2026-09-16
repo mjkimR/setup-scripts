@@ -81,6 +81,9 @@ options_env=(
   "Install just (command runner)"
   "Install ripgrep (rg)"
   "Install Microsoft APM (Agent Package Manager)"
+  "Install GitHub CLI (gh)"
+  "Install Google Cloud CLI (gcloud)"
+  "Install Docker & Compose"
   "Optional terminal addon: Zsh, Oh My Zsh & plugins"
   "Sync VS Code/Cursor/VSCodium configs & extensions"
 )
@@ -92,6 +95,9 @@ defaults_env=(
   "true"  # just
   "true"  # ripgrep
   "true"  # APM
+  "true"  # GitHub CLI
+  "true"  # Google Cloud CLI
+  "true"  # Docker
   "false" # Oh My Zsh
   "true"  # IDE Settings
 )
@@ -103,6 +109,9 @@ scripts_env=(
   "$SCRIPT_DIR/modules/terminal/just/install.sh"
   "$SCRIPT_DIR/modules/terminal/ripgrep/install.sh"
   "$SCRIPT_DIR/modules/terminal/apm/install.sh"
+  "$SCRIPT_DIR/modules/terminal/gh/install.sh"
+  "$SCRIPT_DIR/modules/terminal/gcloud/install.sh"
+  "$SCRIPT_DIR/modules/terminal/docker/install.sh"
   "$SCRIPT_DIR/modules/terminal-addons/zsh/install.sh"
   "$SCRIPT_DIR/modules/ide/vscode/install.sh"
 )

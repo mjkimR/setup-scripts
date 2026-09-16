@@ -34,15 +34,17 @@ class TerminalInstallTests(unittest.TestCase):
             'HOME': str(self.home), 'PATH': str(self.bin), 'TEST_OS': 'macos',
             'CALLS': str(self.log), 'SETUP_INSTALL_ONLY': '1',
         }
-        for name in ('bash', 'sh', 'dirname', 'mkdir', 'chmod'):
+        for name in ('bash', 'sh', 'dirname', 'mkdir', 'chmod', 'mktemp', 'rm'):
             (self.bin / name).symlink_to(shutil.which(name))
-        self.stub('brew', 'echo "brew $*" >> "$CALLS"\n[ "${FAIL:-0}" != 1 ] || exit 9\nname="$2"\n[ "$name" != ripgrep ] || name=rg\nprintf "#!/bin/sh\\nexit 0\\n" > "$(dirname "$0")/$name"\nchmod +x "$(dirname "$0")/$name"')
-        self.stub('sudo', 'echo "sudo $*" >> "$CALLS"\nprintf "#!/bin/sh\\nexit 0\\n" > "$(dirname "$0")/rg"\nchmod +x "$(dirname "$0")/rg"')
+        install_stub = '\n[ "${FAIL:-0}" != 1 ] || exit 9\nfor arg; do case "$arg" in just|apm|gh|ripgrep|gcloud-cli|google-cloud-cli|snapd|docker-desktop) name="$arg" ;; esac; done\ncase "$name" in ripgrep) name=rg ;; gcloud-cli|google-cloud-cli) name=gcloud ;; snapd) name=snap ;; docker-desktop) name=docker ;; esac\nprintf "#!/bin/sh\\nexit 0\\n" > "$(dirname "$0")/$name"\nchmod +x "$(dirname "$0")/$name"'
+        self.stub('brew', 'echo "brew $*" >> "$CALLS"' + install_stub)
+        self.stub('sudo', 'echo "sudo $*" >> "$CALLS"\nif [ "$1" = sh ]; then name=docker-desktop; fi\nif [ "$2" = update ]; then exit 0; fi' + install_stub)
         self.stub('curl', '''echo "curl $*" >> "$CALLS"
 [ "${FAIL:-0}" != 1 ] || exit 9
 case "$*" in
   *just.systems*) name=just ;;
   *apm-unix*) name=apm ;;
+  *get.docker.com*) printf "#!/bin/sh\\nexit 0\\n" > "$4"; exit 0 ;;
   *) exit 8 ;;
 esac
 printf 'mkdir -p "$HOME/.local/bin"\nprintf "#!/bin/sh\\\\nexit 0\\\\n" > "$HOME/.local/bin/%s"\nchmod +x "$HOME/.local/bin/%s"\n' "$name" "$name"
@@ -62,7 +64,7 @@ printf 'mkdir -p "$HOME/.local/bin"\nprintf "#!/bin/sh\\\\nexit 0\\\\n" > "$HOME
     def test_new_tools_install_and_skip_on_both_platforms(self):
         for platform in ('macos', 'ubuntu'):
             self.env['TEST_OS'] = platform
-            for name, command in [('just', 'just'), ('ripgrep', 'rg'), ('apm', 'apm')]:
+            for name, command in [('just', 'just'), ('ripgrep', 'rg'), ('apm', 'apm'), ('gh', 'gh'), ('gcloud', 'gcloud'), ('docker', 'docker')]:
                 with self.subTest(platform=platform, name=name):
                     result = self.run_module(name)
                     self.assertEqual(result.returncode, 0, result.stderr + result.stdout)
@@ -79,9 +81,16 @@ printf 'mkdir -p "$HOME/.local/bin"\nprintf "#!/bin/sh\\\\nexit 0\\\\n" > "$HOME
         self.env['FAIL'] = '1'
         for platform in ('macos', 'ubuntu'):
             self.env['TEST_OS'] = platform
-            for name in ('just', 'apm'):
+            for name in ('just', 'apm', 'gh', 'gcloud', 'docker'):
                 with self.subTest(platform=platform, name=name):
                     self.assertNotEqual(self.run_module(name).returncode, 0)
+
+    def test_docker_without_compose_is_preserved_and_reported(self):
+        self.stub('docker', 'if [ "$1" = compose ]; then exit 1; fi')
+        result = self.run_module('docker')
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn('Compose is missing', result.stderr)
+        self.assertEqual(self.log.read_text(), '')
 
     def test_existing_git_uv_and_nvm_skip_install_and_configuration(self):
         for name in ('git', 'uv', 'node', 'npm'):
@@ -106,7 +115,7 @@ printf 'mkdir -p "$HOME/.local/bin"\nprintf "#!/bin/sh\\\\nexit 0\\\\n" > "$HOME
         (self.project / 'modules/terminal-addons/zsh/install.sh').write_text('exit 88\n')
         result = run()
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(self.log.read_text().splitlines(), ['git', 'nvm', 'uv', 'just', 'ripgrep', 'apm'])
+        self.assertEqual(self.log.read_text().splitlines(), ['git', 'nvm', 'uv', 'just', 'ripgrep', 'apm', 'gh', 'gcloud', 'docker'])
         self.log.write_text('')
         (self.project / 'modules/terminal/nvm/install.sh').write_text('exit 9\n')
         self.assertEqual(run().returncode, 9)
