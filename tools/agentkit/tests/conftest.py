@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -21,14 +22,19 @@ from agentkit.commitsafe import config as safe_config
 STUB = Path(__file__).parent / "stubs" / "agy_stub.py"
 
 
-@pytest.fixture
-def repo(tmp_path: Path) -> Path:
-    root = tmp_path / "repo"
-    root.mkdir()
+@pytest.fixture(scope="session")
+def empty_repo(tmp_path_factory: pytest.TempPathFactory) -> Path:
+    """Initialize Git once; each test gets an independent copy, including its config."""
+    root = tmp_path_factory.mktemp("empty-repo")
     _git(root, "init", "-q", ".")
     _git(root, "config", "user.email", "test@example.com")
     _git(root, "config", "user.name", "test")
     return root
+
+
+@pytest.fixture
+def repo(tmp_path: Path, empty_repo: Path) -> Path:
+    return Path(shutil.copytree(empty_repo, tmp_path / "repo"))
 
 
 @pytest.fixture

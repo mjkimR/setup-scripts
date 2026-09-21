@@ -350,12 +350,11 @@ def common_git_dir(cwd: Path | None = None) -> Path:
 
 
 def _resolve_git_dir(flag: str, *, cwd: Path | None) -> Path:
-    raw = gitutil.run(["rev-parse", flag], cwd=cwd).strip()
-    path = Path(raw)
-    if not path.is_absolute():
-        root = gitutil.repo_root(cwd=cwd)
-        path = (root / path).resolve()
-    return path
+    # Ask Git once, including from subdirectories and linked worktrees. Resolving a
+    # relative result against the repository root both adds a process and can use
+    # the wrong base: Git's relative paths are relative to its working directory.
+    raw = gitutil.run(["rev-parse", "--path-format=absolute", flag], cwd=cwd).strip()
+    return Path(raw).resolve()
 
 
 def repo_config_path(cwd: Path | None = None) -> Path:

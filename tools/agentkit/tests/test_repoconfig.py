@@ -387,6 +387,21 @@ def test_a_worktree_reads_the_repositorys_config_not_its_own(repo: Path) -> None
     assert repo_config_path(cwd=tree) == repo_config_path(cwd=repo)
 
 
+def test_git_directories_resolve_from_nested_checkouts(repo: Path, monkeypatch) -> None:
+    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "base"], cwd=repo, check=True)
+    tree = _worktree(repo, "nested")
+    for checkout in (repo, tree):
+        nested = checkout / "one" / "two"
+        nested.mkdir(parents=True)
+        expected_dir = git_dir(cwd=checkout)
+        expected_config = repo_config_path(cwd=repo)
+        assert git_dir(cwd=nested) == expected_dir
+        assert repo_config_path(cwd=nested) == expected_config
+        monkeypatch.chdir(nested)
+        assert git_dir() == expected_dir
+        assert repo_config_path() == expected_config
+
+
 def test_a_worktree_onboarded_before_the_move_still_loads(repo: Path) -> None:
     """The old per-worktree file is read rather than silently ignored."""
     subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "base"], cwd=str(repo), check=True)
