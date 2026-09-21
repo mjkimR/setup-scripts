@@ -51,7 +51,7 @@ for package_dir in "$PROJECT_ROOT"/tools/*/; do
 
   # `uv run` from inside the package resolves its own environment, so the tests
   # import the package under test rather than whatever is installed globally.
-  if (cd "$package_dir" && uv run --quiet pytest); then
+  if (cd "$package_dir" && uv run --no-active --quiet pytest); then
     :
   else
     failed+=("tools/$package")

@@ -60,7 +60,7 @@ for tool_dir in "$PROJECT_ROOT"/tools/*/; do
 
   if [ "$CHECK_ONLY" = true ]; then
     log_info "  ↳ [Format] Checking code format..."
-    if (cd "$tool_dir" && uv run ruff format --check); then
+    if (cd "$tool_dir" && uv run --no-active ruff format --check); then
       log_success "  ↳ [Format] Format is clean."
     else
       log_error "  ↳ [Format] Code formatting issues found."
@@ -68,7 +68,7 @@ for tool_dir in "$PROJECT_ROOT"/tools/*/; do
     fi
 
     log_info "  ↳ [Lint] Checking lint rules..."
-    if (cd "$tool_dir" && uv run ruff check); then
+    if (cd "$tool_dir" && uv run --no-active ruff check); then
       log_success "  ↳ [Lint] Lint passed."
     else
       log_error "  ↳ [Lint] Lint errors found."
@@ -76,7 +76,7 @@ for tool_dir in "$PROJECT_ROOT"/tools/*/; do
     fi
   else
     log_info "  ↳ [Format] Formatting with ruff..."
-    if (cd "$tool_dir" && uv run ruff format); then
+    if (cd "$tool_dir" && uv run --no-active ruff format); then
       log_success "  ↳ [Format] Format applied."
     else
       log_error "  ↳ [Format] ruff format failed."
@@ -84,7 +84,7 @@ for tool_dir in "$PROJECT_ROOT"/tools/*/; do
     fi
 
     log_info "  ↳ [Lint] Checking & fixing lint with ruff..."
-    if (cd "$tool_dir" && uv run ruff check --fix); then
+    if (cd "$tool_dir" && uv run --no-active ruff check --fix); then
       log_success "  ↳ [Lint] Lint passed / auto-fixed."
     else
       log_error "  ↳ [Lint] ruff check found errors."
