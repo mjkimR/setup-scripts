@@ -62,3 +62,10 @@ passed.
 - Preserve unrelated working-tree changes.
 - Do not commit credentials, environments, caches, or generated artifacts.
 - Do not commit or push unless explicitly asked.
+
+## Documentation language
+
+Use English for README/AGENTS files and technical, operational, or agent instructions.
+Korean is for documents under `docs/` intended for the user's review, including
+analysis, research, and their review indexes. Preserve localized examples, literal
+UI labels, and the configured language of planning artifacts.

@@ -1,9 +1,9 @@
 # handoff
 
 Compacts the current session into a portable handoff document that a fresh
-agent (claude, codex, or antigravity) can pick up. Document generation only —
-invoking the receiving harness is out of scope (planned as
-`agentkit handoff work`).
+agent (claude, codex, or antigravity) can pick up. Document generation only; use
+[`agentkit handoff work`](../../../../tools/agentkit/README.md#work-handoff-files)
+to invoke a receiving harness.
 
 ## Attribution
 

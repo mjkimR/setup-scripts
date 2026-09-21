@@ -19,10 +19,11 @@ agentkit commit context [--mode low|default|high]  conventions + staged diff; no
 agentkit commit verify [--only test|lint]     run the repo's verify commands, echoing each first
 agentkit commit-safe commit -m … [--amend]    the checked, stamped `git commit` skills call
 agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
-agentkit handoff commit [--safe/--plain]      delegate a commit via the checked AgentKit wrapper
+agentkit handoff commit [--safe/--plain]      legacy agy commit route for existing callers
                         [--hint L]... [--tests S]   advisory commit-unit labels + test attestation
 agentkit handoff work --to agy|codex --doc F  have another agent CLI continue a handoff document
 agentkit handoff prompt --doc F               print the pickup prompt for an interactive session
+agentkit handoff polish [paths…]              delegate Markdown copyediting to agy
 agentkit handoff tasks                        what can be handed off
 agentkit agy check|grant                      the allow-list headless agy needs
 agentkit git summary                          working tree overview
@@ -146,7 +147,12 @@ cd tools/agentkit && uv run pytest     # package tests
 tests/run-all.sh                       # repository-wide suites
 ```
 
-### Commit workflow modes
+## Legacy commit handoff
+
+New agent sessions use the native `handoff-commit` skill; see
+[subagent contracts](../../modules/agents/subagents/README.md). The CLI route below
+remains for existing callers such as workbench's assisted commits. Do not run both
+routes against the same checkout concurrently.
 
 `agentkit handoff commit --mode default` (the CLI default) runs enabled repository
 verification before staging/delegation. Failure stops before agy is started. An explicit
@@ -169,3 +175,31 @@ The default `agentkit agy grant` does not grant sandbox bypass. Such failures,
 and denials with no identified command, require evidence review instead of an
 automatic grant/retry. Conversation tool arguments are reported as unconfirmed
 request candidates, never as proof of which command was denied.
+
+## Markdown polish
+
+`agentkit handoff polish [paths…]` runs the copyediting skill through agy and
+verifies file outcomes. The staged pre-polish state supports undo with Git restore;
+see the [sender skill](../../modules/agents/skills/handoff-polish/SKILL.md) for scope.
+
+`--level` chooses L1 개조식, L2 해라체, L3 담백한 합니다체 (default), L4 합니다체(완곡),
+or L5 해요체. `--language` selects style packs and filters targets to that language.
+Run `agentkit handoff polish --list-levels` for the available levels. Packs live under
+`modules/agents/skills/polish-doc/references/style/<language>/`.
+
+Without `--level`, repository configuration in `<common-git-dir>/agentkit-polish.json`
+can choose per-file levels:
+
+```json
+{"levels": {"docs/decisions/**": 2, "*.md": 3}}
+```
+
+Patterns use gitignore-style matching; the first match wins, so put specific rules
+first. A bare pattern matches basenames and `**` crosses directories.
+`agentkit agy grant` installs required command grants: diff-scoped polish needs
+`command(git diff)`; explicit whole-file runs do not. Legacy commit handoff also
+requires git add, git ls-files, and commit-safe commit grants before starting.
+The runner checks Git/file state rather than relying on agy's exit status alone.
+
+For commit identity and `--safe` timestamp-window configuration, see
+[onboarding](../../modules/agents/skills/git-commit/references/onboarding.md).
