@@ -22,7 +22,7 @@ packages = ["src/agentkit"]
 [tool.pytest.ini_options]
 addopts = "-q"
 markers = [
-    "integration: drives the handoff runner end to end against a stub agy",
+    "integration: real Git, filesystem state, or CLI subprocess with stub providers",
 ]
 
 [tool.ruff]

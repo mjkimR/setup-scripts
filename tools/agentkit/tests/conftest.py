@@ -8,9 +8,7 @@ test may read or write the machine's real ones.
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -18,6 +16,7 @@ import pytest
 from agentkit.agy import permissions
 from agentkit.agy.client import AgyClient
 from agentkit.commitsafe import config as safe_config
+from tests.support.git import _git
 
 STUB = Path(__file__).parent / "stubs" / "agy_stub.py"
 
@@ -128,14 +127,3 @@ time:
             save_repo_config(cfg, cwd=repo)
 
     return config
-
-
-def _git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args],
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        check=True,
-        env={**os.environ, "GIT_CONFIG_GLOBAL": "/dev/null"},
-    ).stdout

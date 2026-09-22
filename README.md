@@ -77,7 +77,11 @@ See [devkit](tools/devkit/README.md) for options and clipboard support.
 ./check.sh --check       # read-only format/lint checks and all tests
 ./check.sh               # apply formatting/lint fixes, then test
 tests/run-all.sh agentkit # focused suites by name
+tests/run-all.sh '' unit # isolated logic across tools
+tests/run-all.sh '' integration # installer, Git, and CLI contracts
 ```
 
 Shell tests use fixtures and stub external commands; Python CLI tests run through
 UV against repository sources. Do not run real installers as routine tests.
+
+See [the test guide](tests/README.md) for tier boundaries and source-mirroring paths.
