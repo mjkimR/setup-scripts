@@ -1,0 +1,7 @@
+name: research-review
+description: Review research result files against their original questions and the current decision
+default: false
+
+targets:
+  - claude
+  - codex

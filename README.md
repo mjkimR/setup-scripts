@@ -43,6 +43,27 @@ modules/agents/skills/install.sh git-commit # one skill
 | `handoff` | Claude Code | Write a portable session handoff document. |
 | `polish-doc` | Antigravity | Korean Markdown copyediting. |
 | `handoff-polish` | Claude Code, Codex | Delegate copyediting to agy. |
+| `research-req` | Claude Code, Codex | Prepare separate, copy-ready Deep Research prompts by topic. |
+| `research-review` | Claude Code, Codex | Review result files and derive conclusions for the current task. |
+
+The research skills are opt-in at installation:
+
+```bash
+modules/agents/skills/install.sh research-req research-review
+```
+
+Invoke them explicitly with `/research-req` or `/research-review` in Claude Code,
+and `$research-req` or `$research-review` in Codex. Request text after
+`research-req` scopes the prompts; without it, the skill proposes topics from the
+discussion for selection. Paste each generated prompt file into its own Gemini
+Deep Research request, then pass downloaded result files to `research-review`.
+Both skills use `agentkit scratch path research` for prompts, preserved reports,
+and reviews. No clipboard or Google account connection is required.
+
+The installer links entire skill directories, including Claude's invocation
+setting in `SKILL.md` and Codex's policy in `agents/openai.yaml`. These research
+skills disable implicit invocation in both hosts; `meta.yaml`'s `default` only
+controls installation selection, not invocation.
 
 Use the separate **Sync AI Agent subagents** option for `handoff-commit` and its
 native commit worker. This route delegates to Codex's native child or Claude Code's

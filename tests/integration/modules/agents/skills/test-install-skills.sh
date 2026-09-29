@@ -21,6 +21,7 @@ run_installer
 
 gemini_skills="$test_home/.gemini/config/skills"
 claude_skills="$test_home/.claude/skills"
+codex_skills="$test_home/.codex/skills"
 
 [ -L "$gemini_skills/git-commit" ] || {
   echo "FAIL: git-commit was not symlinked by default" >&2
@@ -43,12 +44,41 @@ claude_skills="$test_home/.claude/skills"
 }
 
 # 2. Selective run: install specific skill
+for skill in research-req research-review; do
+  for target in "$claude_skills" "$codex_skills"; do
+    [ ! -e "$target/$skill" ] || {
+      echo "FAIL: $skill was installed despite default: false" >&2
+      exit 1
+    }
+  done
+done
+
 run_installer git-commit-revise
 
 [ -L "$gemini_skills/git-commit-revise" ] || {
   echo "FAIL: git-commit-revise was not installed when explicitly requested" >&2
   exit 1
 }
+
+# Research skills must expose host policy files through selective installation,
+# including after a repeat sync. All effects remain inside the temporary HOME.
+run_installer research-req research-review
+run_installer research-req research-review
+for skill in research-req research-review; do
+  source_skill="$PROJECT_ROOT/modules/agents/skills/$skill"
+  for target in "$claude_skills" "$codex_skills"; do
+    [ -L "$target/$skill" ] &&
+      cmp -s "$source_skill/SKILL.md" "$target/$skill/SKILL.md" &&
+      cmp -s "$source_skill/agents/openai.yaml" "$target/$skill/agents/openai.yaml" || {
+      echo "FAIL: $skill installation did not preserve the skill and nested host policy" >&2
+      exit 1
+    }
+  done
+  [ ! -e "$gemini_skills/$skill" ] || {
+    echo "FAIL: $skill was installed for an unsupported target" >&2
+    exit 1
+  }
+done
 
 # 3. Full install run with --all
 run_installer --all

@@ -1,0 +1,7 @@
+name: research-req
+description: Prepare focused Deep Research prompt files from a request or the current discussion
+default: false
+
+targets:
+  - claude
+  - codex
