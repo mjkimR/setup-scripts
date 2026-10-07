@@ -1,3 +1,0 @@
-name: commit
-description: Native commit subagent delegation (Claude Code agentkit-commit, Codex handoff-commit)
-default: true

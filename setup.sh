@@ -21,7 +21,7 @@ show_help() {
   echo "Options:"
   echo "  --env, env        Configure developer environment (Git, NVM, UV, Zsh, VS Code)"
   echo "  --terminal       Install all registered terminal tools without configuration prompts"
-  echo "  --agents, agents  Configure AI agents (Skills, Subagents, Notification hooks)"
+  echo "  --agents, agents  Configure AI agents (Skills, Notification hooks)"
   echo "  --all, all        Configure both developer environment and AI agents"
   echo "  -h, --help        Show this help message"
 }
@@ -119,26 +119,23 @@ scripts_env=(
 # Category 2: AI Agent Ecosystem
 options_agent=(
   "Sync AI Agent skills & agentkit CLI (Antigravity, Claude Code, Codex)"
-  "Sync AI Agent subagents (Claude Code; Codex sender profiles)"
   "Install agent notification hooks (Claude Code & Codex, macOS only)"
 )
 
 defaults_agent=(
   "true"  # Agent skills
-  "true"  # Agent subagents
   "false" # Agent notification hooks
 )
 
 scripts_agent=(
   "$SCRIPT_DIR/modules/agents/skills/install.sh"
-  "$SCRIPT_DIR/modules/agents/subagents/install.sh"
   "$SCRIPT_DIR/modules/agents/hooks/install.sh"
 )
 # Prompt category if not specified via CLI
 if [ -z "$MODE" ]; then
   categories=(
     "🛠️  Development Environment (Git, Node/NVM, UV, Zsh, VS Code)"
-    "🤖 AI Agent Ecosystem (Skills & agentkit CLI, Subagents, Hooks)"
+    "🤖 AI Agent Ecosystem (Skills & agentkit CLI, Hooks)"
     "🚀 Full Setup (Environment + AI Agents)"
     "❌ Exit"
   )

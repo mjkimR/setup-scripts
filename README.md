@@ -1,7 +1,7 @@
 # Development environment setup
 
 Bash setup wizard for macOS and Ubuntu: terminal tools, Git/IDE configuration,
-agent skills, native subagents, and notification hooks. The checkbox menu uses
+agent skills, and notification hooks. The checkbox menu uses
 arrow keys to navigate, Space to select, and Enter to confirm.
 
 ## Usage
@@ -10,7 +10,7 @@ arrow keys to navigate, Space to select, and Enter to confirm.
 ./setup.sh             # interactive category menu
 ./setup.sh --terminal  # all required terminal tools; no configuration prompts
 ./setup.sh --env       # environment configuration and optional addons
-./setup.sh --agents    # skills, subagents, and notification hooks
+./setup.sh --agents    # skills and notification hooks
 ./setup.sh --all       # environment and agents
 ```
 
@@ -65,12 +65,10 @@ setting in `SKILL.md` and Codex's policy in `agents/openai.yaml`. These research
 skills disable implicit invocation in both hosts; `meta.yaml`'s `default` only
 controls installation selection, not invocation.
 
-Use the separate **Sync AI Agent subagents** option for `handoff-commit` and its
-native commit worker. This route delegates to Codex's native child or Claude Code's
-installed profile. See [subagents](modules/agents/subagents/README.md) for installation
-and provider contracts; [ADR 0010](docs/decisions/0010-native-commit-subagent-profiles.md)
-records the design. The older `agentkit handoff commit` CLI remains available for
-compatibility with existing callers.
+Commit workflows run directly in the active agent session using repository
+templates and `agentkit commit-safe`. Subagent delegation has been deprecated
+([ADR 0015](docs/decisions/0015-deprecate-commit-subagents.md)). When delegating
+to Antigravity is preferred, `agentkit handoff commit` remains available.
 
 [AgentKit](tools/agentkit/README.md) owns executable behavior: commit onboarding,
 verification, guards, handoff, and polish configuration. Skills describe workflows.

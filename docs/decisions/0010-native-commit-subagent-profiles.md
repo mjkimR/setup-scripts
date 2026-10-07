@@ -1,7 +1,7 @@
 # 10. Use native subagent profiles for explicit commit delegation
 
 - **Date**: 2026-09-13
-- **Status**: Accepted
+- **Status**: Superseded by [0015](./0015-deprecate-commit-subagents.md)
 - **Extends**: [0001](./0001-delegate-commits-to-antigravity-cli.md) and
   [0002](./0002-consolidate-the-commit-skill-set.md)
 

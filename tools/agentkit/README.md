@@ -34,9 +34,8 @@ agentkit scratch path|onboard|clean           per-repo scratch space for agent w
 
 `/git-commit low` uses a bounded staged patch preview; `/git-commit` uses the full
 staged patch; `/git-commit high` permits additional targeted inspection. Every
-mode uses medium message reasoning and creates at most one commit. In Codex the
-direct skill sets medium effort on a Luna message worker; other hosts retain their runtime effort if no override is
-available. `/handoff-commit` delegates the whole workflow instead.
+mode creates at most one commit. Message generation runs directly in the calling
+session using the repository template and conventions from `agentkit commit context`.
 
 Low uses only the supplied inventory and bounded preview for message generation.
 Even when omitted changes are unclear, it forbids further diff, file, or history
@@ -147,12 +146,13 @@ cd tools/agentkit && uv run pytest     # package tests
 tests/run-all.sh                       # repository-wide suites
 ```
 
-## Legacy commit handoff
+## Commit handoff to Antigravity
 
-New agent sessions use the native `handoff-commit` skill; see
-[subagent contracts](../../modules/agents/subagents/README.md). The CLI route below
-remains for existing callers such as workbench's assisted commits. Do not run both
-routes against the same checkout concurrently.
+The `agentkit handoff commit` CLI delegates the commit workflow to Antigravity
+(`agy`). Subagent delegation has been deprecated ([ADR 0015](../../docs/decisions/0015-deprecate-commit-subagents.md))
+in favor of running commits directly in the active session. This CLI route
+remains available when offloading commit execution to `agy` is desired. Do not run
+multiple commit workflows against the same checkout concurrently.
 
 `agentkit handoff commit --mode default` (the CLI default) runs enabled repository
 verification before staging/delegation. Failure stops before agy is started. An explicit

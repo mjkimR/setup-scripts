@@ -1,11 +1,11 @@
-"""Read repository-wide diffs without changing the index or worktree."""
-
+import os
 import subprocess
 from pathlib import Path
 
 
 def run(args: list[str], cwd: Path | None = None) -> str:
-    result = subprocess.run(["git", *args], cwd=cwd, capture_output=True, text=True, errors="replace")
+    env = {**os.environ, "LC_ALL": "C"}
+    result = subprocess.run(["git", *args], cwd=cwd, env=env, capture_output=True, text=True, errors="replace")
     if result.returncode:
         raise RuntimeError(result.stderr.strip() or "Git command failed.")
     return result.stdout
