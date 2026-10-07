@@ -72,7 +72,9 @@ agentkit commit onboard \
   [--verify/--no-verify] \
   [--install-hooks/--no-install-hooks] \
   [--hooks-verbosity <quiet|compact|verbose>] \
-  [--push/--no-push]
+  [--push/--no-push] \
+  [--push-remote <remote>] \
+  [--push-branch <branch>]
 ```
 
 ### 5. Verify Installation

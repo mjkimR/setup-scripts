@@ -39,10 +39,8 @@ modules/agents/skills/install.sh git-commit # one skill
 | Skill | Agents | Purpose |
 | --- | --- | --- |
 | `git-commit` | Antigravity, Claude Code, Codex | One commit with low/default/high modes and repository guards. |
-| `git-commit-revise` | Antigravity | Review/revise commit messages. |
 | `handoff` | Claude Code | Write a portable session handoff document. |
 | `polish-doc` | Antigravity | Korean Markdown copyediting. |
-| `handoff-polish` | Claude Code, Codex | Delegate copyediting to agy. |
 | `research-req` | Claude Code, Codex | Prepare separate, copy-ready Deep Research prompts by topic. |
 | `research-review` | Claude Code, Codex | Review result files and derive conclusions for the current task. |
 

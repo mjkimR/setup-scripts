@@ -198,6 +198,7 @@ def commit(
     # headless run. Output is inherited: a failing hook has to reach the caller
     # verbatim, not compressed into an advisory.
     commit_env = {**os.environ, **exports}
+    commit_env["AGENTKIT_COMMITSAFE_PUSH"] = "1"
     if allow_secret:
         commit_env["AGENTKIT_ALLOW_SECRET"] = ",".join(allow_secret)
     if plain:
@@ -208,13 +209,19 @@ def commit(
         should_push = (repo_cfg.push.enabled if repo_cfg else False) if push is None else push
         if should_push:
             push_argv = ["git", "push"]
-            if repo_cfg and repo_cfg.push.remote:
-                push_argv.append(repo_cfg.push.remote)
-                if repo_cfg.push.branch:
-                    push_argv.append(repo_cfg.push.branch)
+            remote = repo_cfg.push.remote if repo_cfg else ""
+            branch = repo_cfg.push.branch if repo_cfg else ""
+            if remote:
+                push_argv.append(remote)
+                if branch:
+                    push_argv.append(branch)
+            target = f"{remote or 'default remote'}{(' ' + branch) if branch else ''}"
             click.echo(f"[INFO] Auto-pushing ({' '.join(push_argv)})…")
             push_res = subprocess.run(push_argv)
-            if push_res.returncode != 0:
-                click.echo("[ERROR] Auto-push failed.", err=True)
+            if push_res.returncode == 0:
+                click.echo(f"[SUCCESS] Auto-pushed to {target}.")
+            else:
+                click.echo(f"[ERROR] Auto-push failed: exit {push_res.returncode}.", err=True)
+                click.echo(f"[hint] To push manually: {' '.join(push_argv)}", err=True)
 
     ctx.exit(result.returncode)

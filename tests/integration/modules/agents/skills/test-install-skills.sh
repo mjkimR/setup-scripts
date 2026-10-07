@@ -33,11 +33,6 @@ codex_skills="$test_home/.codex/skills"
   exit 1
 }
 
-[ ! -e "$gemini_skills/git-commit-revise" ] || {
-  echo "FAIL: git-commit-revise was installed despite default: false" >&2
-  exit 1
-}
-
 [ ! -e "$gemini_skills/polish-doc" ] || {
   echo "FAIL: polish-doc was installed despite default: false" >&2
   exit 1
@@ -53,12 +48,14 @@ for skill in research-req research-review; do
   done
 done
 
-run_installer git-commit-revise
+run_installer polish-doc
 
-[ -L "$gemini_skills/git-commit-revise" ] || {
-  echo "FAIL: git-commit-revise was not installed when explicitly requested" >&2
+[ -L "$gemini_skills/polish-doc" ] || {
+  echo "FAIL: polish-doc was not installed when explicitly requested" >&2
   exit 1
 }
+rm "$gemini_skills/polish-doc"
+
 
 # Research skills must expose host policy files through selective installation,
 # including after a repeat sync. All effects remain inside the temporary HOME.

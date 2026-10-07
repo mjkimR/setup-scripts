@@ -171,12 +171,23 @@ def commit_conventions(as_json: bool) -> None:
             "template": conv.template,
             "rules": conv.rules,
             "strip_co_authored_by": conv.strip_co_authored_by,
+            "auto_push": {
+                "enabled": cfg.push.enabled,
+                "remote": cfg.push.remote,
+                "branch": cfg.push.branch,
+            },
         }
         click.echo(json.dumps(data, indent=2, ensure_ascii=False))
         return
 
-    click.echo(f"Language: {conv.language}")
-    click.echo(f"Style:    {conv.style}")
+    push_desc = "[ON]" if cfg.push.enabled else "[OFF]"
+    if cfg.push.enabled:
+        target = f"{cfg.push.remote or 'default'}" + (f"/{cfg.push.branch}" if cfg.push.branch else "")
+        push_desc += f" ({target})"
+
+    click.echo(f"Language:  {conv.language}")
+    click.echo(f"Style:     {conv.style}")
+    click.echo(f"Auto-push: {push_desc}")
     click.echo("\n--- Template ---")
     click.echo(conv.template)
     if conv.rules:

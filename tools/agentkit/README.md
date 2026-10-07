@@ -180,7 +180,7 @@ request candidates, never as proof of which command was denied.
 
 `agentkit handoff polish [paths…]` runs the copyediting skill through agy and
 verifies file outcomes. The staged pre-polish state supports undo with Git restore;
-see the [sender skill](../../modules/agents/skills/handoff-polish/SKILL.md) for scope.
+see the [copyediting skill](../../modules/agents/skills/polish-doc/SKILL.md) for scope.
 
 `--level` chooses L1 개조식, L2 해라체, L3 담백한 합니다체 (default), L4 합니다체(완곡),
 or L5 해요체. `--language` selects style packs and filters targets to that language.

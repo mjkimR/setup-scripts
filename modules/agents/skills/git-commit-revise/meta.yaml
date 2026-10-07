@@ -1,9 +1,0 @@
-name: git-commit-revise
-description: Review, critique, and propose revisions for recent commits or amend commit messages
-default: false
-
-
-targets:
-  - antigravity
-  # - claude
-  # - codex

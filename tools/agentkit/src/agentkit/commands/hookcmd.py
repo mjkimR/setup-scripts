@@ -338,11 +338,66 @@ def run_commit_msg(msg_file: Path, is_verbose: bool, is_quiet: bool) -> None:
         click.echo("[hook:commit-msg] [OK] Commit message verified.")
 
 
+def _handle_auto_push(repo_cfg, root: Path, verbosity: str) -> None:
+    if not repo_cfg.push.enabled:
+        return
+
+    # Avoid duplicate push when agentkit commitsafe is explicitly handling it
+    if os.environ.get("AGENTKIT_COMMITSAFE_PUSH") == "1":
+        return
+
+    # Skip push during intermediate commit with bypass-intermediate policy
+    if repo_cfg.hooks.policy == "bypass-intermediate":
+        pending_changes = gitutil.pending(cwd=root)
+        has_unstaged = any(line[1:2] in ("M", "D", "?") or line.startswith("??") for line in pending_changes)
+        if has_unstaged:
+            if verbosity in ("compact", "verbose"):
+                click.echo("[hook:post-commit] [SKIP] Auto-push skipped for intermediate commit")
+            return
+
+    # Check git config override to bypass auto-push (e.g. git -c agentkit.push=false commit ...)
+    push_override = gitutil.config_bool("agentkit.push", cwd=root)
+    if push_override is False:
+        if verbosity in ("compact", "verbose"):
+            click.echo("[hook:post-commit] [SKIP] Auto-push bypassed via git config (agentkit.push=false)")
+        return
+
+    push_argv = ["git", "push"]
+    if repo_cfg.push.remote:
+        push_argv.append(repo_cfg.push.remote)
+        if repo_cfg.push.branch:
+            push_argv.append(repo_cfg.push.branch)
+
+    push_env = os.environ.copy()
+    for git_var in (
+        "GIT_DIR",
+        "GIT_WORK_TREE",
+        "GIT_INDEX_FILE",
+        "GIT_PREFIX",
+        "GIT_COMMON_DIR",
+    ):
+        push_env.pop(git_var, None)
+
+    target_desc = f"{repo_cfg.push.remote or 'default remote'}{(' ' + repo_cfg.push.branch) if repo_cfg.push.branch else ''}"
+    push_res = subprocess.run(
+        push_argv,
+        cwd=str(root),
+        env=push_env,
+        capture_output=True,
+        text=True,
+    )
+    if push_res.returncode == 0:
+        click.echo(f"[hook:post-commit] [PUSH] Auto-pushed to {target_desc}.")
+    else:
+        click.echo(f"[hook:post-commit] [ERROR] Auto-push failed: {push_res.stderr.strip()}", err=True)
+        click.echo(f"[hint] To push manually: {' '.join(push_argv)}", err=True)
+
+
 @hook_group.command("run-post-commit")
 @click.option("--verbose", "-v", "is_verbose", is_flag=True, default=False, help="Force verbose hook output.")
 @click.option("--quiet", "-q", "is_quiet", is_flag=True, default=False, help="Force quiet hook output.")
 def run_post_commit(is_verbose: bool, is_quiet: bool) -> None:
-    """Run post-commit actions: apply virtual timeline timestamp if enabled."""
+    """Run post-commit actions: apply virtual timeline timestamp and auto-push if enabled."""
     # Avoid infinite recursion during git commit --amend
     if os.environ.get("AGENTKIT_POST_COMMIT_AMENDING") == "1":
         return
@@ -351,41 +406,41 @@ def run_post_commit(is_verbose: bool, is_quiet: bool) -> None:
     verbosity = _resolve_verbosity(cwd=root, is_verbose=is_verbose, is_quiet=is_quiet)
 
     repo_cfg = load_repo_config(cwd=root)
-    if repo_cfg is None or not repo_cfg.timeline.enabled:
+    if repo_cfg is None:
         return
 
-    # Check git config override to bypass timeline (e.g. git -c agentkit.timeline=false commit ...)
-    timeline_override = gitutil.config_bool("agentkit.timeline", cwd=root)
-    if timeline_override is False:
-        return
+    # 1. Timeline timestamp
+    if repo_cfg.timeline.enabled:
+        timeline_override = gitutil.config_bool("agentkit.timeline", cwd=root)
+        if timeline_override is not False:
+            try:
+                config, _ = checked_identity(cwd=root)
+                stamp = resolve(config)
+                if stamp.enabled:
+                    stamp_str = stamp.format()
+                    if verbosity in ("compact", "verbose"):
+                        click.echo(f"[hook:post-commit] Applying virtual timeline: {stamp_str}")
 
-    try:
-        config, _ = checked_identity(cwd=root)
-        stamp = resolve(config)
-        if not stamp.enabled:
-            return
+                    amend_env = {
+                        **os.environ,
+                        "AGENTKIT_POST_COMMIT_AMENDING": "1",
+                        "GIT_AUTHOR_DATE": stamp_str,
+                        "GIT_COMMITTER_DATE": stamp_str,
+                    }
+                    for git_var in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX"):
+                        amend_env.pop(git_var, None)
 
-        stamp_str = stamp.format()
-        if verbosity in ("compact", "verbose"):
-            click.echo(f"[hook:post-commit] Applying virtual timeline: {stamp_str}")
+                    result = subprocess.run(
+                        ["git", "commit", "--amend", "--no-edit", "--no-verify", f"--date={stamp_str}"],
+                        cwd=str(root),
+                        env=amend_env,
+                        capture_output=True,
+                        text=True,
+                    )
+                    if result.returncode != 0:
+                        click.echo(f"[hook:post-commit] [WARN] Failed to apply timeline: {result.stderr.strip()}", err=True)
+            except Exception as error:
+                click.echo(f"[hook:post-commit] [WARN] Timeline post-commit failed: {error}", err=True)
 
-        amend_env = {
-            **os.environ,
-            "AGENTKIT_POST_COMMIT_AMENDING": "1",
-            "GIT_AUTHOR_DATE": stamp_str,
-            "GIT_COMMITTER_DATE": stamp_str,
-        }
-        for git_var in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX"):
-            amend_env.pop(git_var, None)
-
-        result = subprocess.run(
-            ["git", "commit", "--amend", "--no-edit", "--no-verify", f"--date={stamp_str}"],
-            cwd=str(root),
-            env=amend_env,
-            capture_output=True,
-            text=True,
-        )
-        if result.returncode != 0:
-            click.echo(f"[hook:post-commit] [WARN] Failed to apply timeline: {result.stderr.strip()}", err=True)
-    except Exception as error:
-        click.echo(f"[hook:post-commit] [WARN] Timeline post-commit failed: {error}", err=True)
+    # 2. Auto-push
+    _handle_auto_push(repo_cfg, root, verbosity)

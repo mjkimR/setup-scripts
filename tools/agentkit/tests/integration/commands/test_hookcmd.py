@@ -12,6 +12,7 @@ from agentkit.cli import cli
 from agentkit.repoconfig import (
     ConventionConfig,
     HooksConfig,
+    PushConfig,
     RepoConfig,
     TimelineConfig,
     VerifyConfig,
@@ -312,3 +313,118 @@ def test_run_pre_commit_compact_mode(hook_repo):
     assert result.exit_code == 0
     assert "✓ test passed" in result.output
     assert "[hook:pre-commit] [OK] All checks passed." in result.output
+
+
+def test_run_post_commit_auto_push_successful(hook_repo, monkeypatch):
+    runner = CliRunner()
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True),
+        push=PushConfig(enabled=True, remote="origin", branch="main"),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: initial commit")
+
+    pushed_args = []
+    real_run = subprocess.run
+
+    def mock_run(args, **kwargs):
+        if isinstance(args, list) and len(args) > 1 and args[0] == "git" and args[1] == "push":
+            pushed_args.append(list(args))
+            return subprocess.CompletedProcess(args, 0, stdout="Everything up-to-date\n", stderr="")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = runner.invoke(cli, ["hook", "run-post-commit"])
+    assert result.exit_code == 0
+    assert len(pushed_args) == 1
+    assert pushed_args[0] == ["git", "push", "origin", "main"]
+    assert "[hook:post-commit] [PUSH] Auto-pushed to origin main." in result.output
+
+
+def test_run_post_commit_auto_push_bypassed_via_git_config(hook_repo, monkeypatch):
+    runner = CliRunner()
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True),
+        push=PushConfig(enabled=True, remote="origin", branch="main"),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: initial commit")
+
+    git("config", "agentkit.push", "false")
+
+    pushed_args = []
+    real_run = subprocess.run
+
+    def mock_run(args, **kwargs):
+        if isinstance(args, list) and len(args) > 1 and args[0] == "git" and args[1] == "push":
+            pushed_args.append(list(args))
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = runner.invoke(cli, ["hook", "run-post-commit", "--verbose"])
+    assert result.exit_code == 0
+    assert len(pushed_args) == 0
+    assert "Auto-push bypassed via git config" in result.output
+
+
+def test_run_post_commit_auto_push_failure_shows_error_and_hint(hook_repo, monkeypatch):
+    runner = CliRunner()
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True),
+        push=PushConfig(enabled=True, remote="origin", branch="main"),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: initial commit")
+
+    real_run = subprocess.run
+
+    def mock_run(args, **kwargs):
+        if isinstance(args, list) and len(args) > 1 and args[0] == "git" and args[1] == "push":
+            return subprocess.CompletedProcess(args, 1, stdout="", stderr="fatal: remote rejected")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = runner.invoke(cli, ["hook", "run-post-commit"])
+    assert result.exit_code == 0
+    assert "[hook:post-commit] [ERROR] Auto-push failed: fatal: remote rejected" in result.output
+    assert "[hint] To push manually: git push origin main" in result.output
+
+
+def test_commit_conventions_shows_auto_push_status(hook_repo):
+    runner = CliRunner()
+    # 1. When push is off
+    result = runner.invoke(cli, ["commit", "conventions"])
+    assert result.exit_code == 0
+    assert "Auto-push: [OFF]" in result.output
+
+    # 2. When push is on
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True),
+        push=PushConfig(enabled=True, remote="origin", branch="main"),
+    )
+    save_repo_config(cfg)
+
+    result2 = runner.invoke(cli, ["commit", "conventions"])
+    assert result2.exit_code == 0
+    assert "Auto-push: [ON] (origin/main)" in result2.output

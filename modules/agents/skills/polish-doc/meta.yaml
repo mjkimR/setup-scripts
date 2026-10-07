@@ -5,5 +5,5 @@ default: false
 
 targets:
   - antigravity
-  # - claude   # sender side uses handoff-polish; polishing there defeats the delegation
+  # - claude
   # - codex

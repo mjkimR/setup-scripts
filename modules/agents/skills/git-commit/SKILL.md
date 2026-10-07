@@ -25,3 +25,11 @@ Stage intended changes and create a git commit.
     ```bash
     git commit --no-verify -m "..."
     ```
+- **Auto-Push Policy**:
+  - Check auto-push status via `agentkit commit conventions` (`Auto-push: [ON]` or `[OFF]`).
+  - If `Auto-push: [ON]`, `post-commit` automatically pushes (`[hook:post-commit] [PUSH] Auto-pushed to ...`). **Do not run manual `git push`**.
+  - If `Auto-push: [OFF]`, do **not** push unless explicitly instructed by the user.
+  - To bypass auto-push for a specific commit:
+    ```bash
+    git -c agentkit.push=false commit -m "..."
+    ```
