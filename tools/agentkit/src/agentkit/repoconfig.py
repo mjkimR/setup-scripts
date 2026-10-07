@@ -69,6 +69,7 @@ DEFAULT_HOOKS_POLICY = "bypass-intermediate"
 @dataclass
 class HooksConfig:
     policy: str = DEFAULT_HOOKS_POLICY
+    installed: bool = False
 
 
 @dataclass
@@ -303,6 +304,7 @@ class RepoConfig:
             ),
             hooks=HooksConfig(
                 policy=hooks_data.get("policy", DEFAULT_HOOKS_POLICY),
+                installed=bool(hooks_data.get("installed", False)),
             ),
             verify=VerifyConfig(
                 enabled=verify_data.get("enabled", True),

@@ -7,9 +7,12 @@ reads as "no changes".
 
 from __future__ import annotations
 
+import contextlib
+import os
 import re
 import subprocess
-from collections.abc import Sequence
+import sys
+from collections.abc import Generator, Sequence
 from pathlib import Path
 
 from .errors import GitCommandError, GitLockError, NotAGitRepoError
@@ -105,3 +108,70 @@ def config_value(key: str, cwd: Path | None = None) -> str:
         text=True,
     )
     return result.stdout.strip()
+
+
+def config_bool(key: str, default: bool | None = None, cwd: Path | None = None) -> bool | None:
+    """Return a git config value interpreted as boolean, or default if unset."""
+    result = subprocess.run(
+        ["git", "config", "--bool", key],
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode != 0:
+        return default
+    val = result.stdout.strip().lower()
+    if val == "true":
+        return True
+    if val == "false":
+        return False
+    return default
+
+
+@contextlib.contextmanager
+def staged_snapshot(cwd: Path | None = None) -> Generator[None, None, None]:
+    """Temporarily stash unstaged changes so commands run strictly against staged content.
+
+    Restores the unstaged working tree in a finally block.
+    """
+    target = str(cwd) if cwd else None
+    target_path = Path(target) if target else None
+
+    # git stash requires at least one commit in the repository (fails on unborn branch)
+    if not head_sha(target_path):
+        yield
+        return
+
+    diff_proc = subprocess.run(
+        ["git", "diff", "--quiet"],
+        cwd=target,
+        capture_output=True,
+    )
+    # returncode 0 means no unstaged changes in tracked files
+    if diff_proc.returncode == 0:
+        yield
+        return
+
+    stash_msg = f"agentkit-precommit-staged-{os.getpid()}"
+    stash_push = subprocess.run(
+        ["git", "stash", "push", "--keep-index", "-m", stash_msg],
+        cwd=target,
+        capture_output=True,
+        text=True,
+    )
+    stashed = stash_push.returncode == 0
+    try:
+        yield
+    finally:
+        if stashed:
+            pop_res = subprocess.run(
+                ["git", "stash", "pop", "-q"],
+                cwd=target,
+                capture_output=True,
+                text=True,
+            )
+            if pop_res.returncode != 0:
+                sys.stderr.write(
+                    f"[hook:pre-commit] [WARN] Failed to automatically pop unstaged changes stash: {pop_res.stderr.strip()}\n"
+                    f"[hook:pre-commit] [WARN] Stashed changes preserved in: {stash_msg}\n"
+                )

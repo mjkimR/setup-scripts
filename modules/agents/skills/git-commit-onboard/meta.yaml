@@ -1,0 +1,9 @@
+name: git-commit-onboard
+description: Onboard repository for commit conventions, verification, and git hooks
+default: false
+hidden: true
+
+targets:
+  - antigravity
+  - claude
+  - codex

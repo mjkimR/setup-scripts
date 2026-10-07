@@ -198,6 +198,8 @@ def commit(
     # headless run. Output is inherited: a failing hook has to reach the caller
     # verbatim, not compressed into an advisory.
     commit_env = {**os.environ, **exports}
+    if allow_secret:
+        commit_env["AGENTKIT_ALLOW_SECRET"] = ",".join(allow_secret)
     if plain:
         for name in INHERITED_DATE_VARS:
             commit_env.pop(name, None)

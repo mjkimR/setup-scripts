@@ -154,6 +154,57 @@ def test_commit_cli_onboard_and_config(repo: Path, monkeypatch) -> None:
     assert loaded.timeline.enabled is False
 
 
+def test_commit_cli_onboard_update_preserves_settings(repo: Path, monkeypatch) -> None:
+    monkeypatch.chdir(repo)
+    runner = CliRunner()
+
+    # Initial onboard
+    res = runner.invoke(
+        cli,
+        [
+            "commit",
+            "onboard",
+            "--language",
+            "ko",
+            "--style",
+            "conventional",
+            "--email",
+            "my@custom.com",
+            "--start",
+            "10:00",
+            "--end",
+            "19:00",
+            "--test-cmd",
+            "pytest -q",
+        ],
+    )
+    assert res.exit_code == 0
+
+    # Running onboard again without --force or --update should inform the user
+    res = runner.invoke(cli, ["commit", "onboard"])
+    assert res.exit_code == 0
+    assert "Repository is already onboarded" in res.output
+
+    # Running onboard with --update preserves custom values while applying overrides and installing hooks
+    res = runner.invoke(cli, ["commit", "onboard", "--update", "--language", "en"])
+    assert res.exit_code == 0
+    assert "[SUCCESS] Updated repository commit configuration" in res.output
+
+    loaded = load_repo_config(cwd=repo)
+    assert loaded is not None
+    # Updated field
+    assert loaded.conventions.language == "en"
+    # Preserved fields
+    assert loaded.conventions.style == "conventional"
+    assert loaded.whitelist.allowed_emails == ["my@custom.com"]
+    assert loaded.timeline.start == "10:00"
+    assert loaded.timeline.end == "19:00"
+    assert loaded.verify.test == "pytest -q"
+    # Hooks installed
+    assert (repo / ".git" / "hooks" / "post-commit").exists()
+    assert (repo / ".git" / "hooks" / "pre-commit").exists()
+
+
 def test_repo_config_migration_and_backfill(repo: Path) -> None:
     path = repo_config_path(cwd=repo)
     # Write a sparse/legacy config without version or timeline

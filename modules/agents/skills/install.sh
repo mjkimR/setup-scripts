@@ -80,6 +80,7 @@ all_skill_dirs=()
 all_skill_names=()
 all_skill_descriptions=()
 all_skill_defaults=()
+all_skill_hiddens=()
 
 while IFS= read -r dir; do
   [ -d "$dir" ] && [ -f "${dir}/meta.yaml" ] || continue
@@ -96,11 +97,18 @@ while IFS= read -r dir; do
   else
     default_val="false"
   fi
+  hidden_val=$(get_meta_field "$meta_file" "hidden")
+  if [ "$hidden_val" = "true" ]; then
+    hidden_val="true"
+  else
+    hidden_val="false"
+  fi
 
   all_skill_dirs+=("$clean_path")
   all_skill_names+=("$name")
   all_skill_descriptions+=("$desc")
   all_skill_defaults+=("$default_val")
+  all_skill_hiddens+=("$hidden_val")
 done < <(find "$SCRIPT_DIR" -mindepth 1 -maxdepth 1 -type d | sort)
 
 if [ ${#all_skill_dirs[@]} -eq 0 ]; then
@@ -120,6 +128,9 @@ if [ $# -gt 0 ]; then
       echo ""
       echo "Available skills in repository:"
       for ((i=0; i<${#all_skill_names[@]}; i++)); do
+        if [ "${all_skill_hiddens[i]}" = "true" ]; then
+          continue
+        fi
         printf "  - %-20s (default: %5s) %s\n" "${all_skill_names[i]}" "${all_skill_defaults[i]}" "${all_skill_descriptions[i]}"
       done
       exit 0
@@ -143,16 +154,23 @@ if [ $# -gt 0 ]; then
 elif [ -t 0 ] && [ -t 1 ]; then
   # Interactive terminal -> Prompt user with multi_select_menu
   menu_options=()
+  menu_defaults=()
+  visible_indices=()
   for ((i=0; i<${#all_skill_names[@]}; i++)); do
+    if [ "${all_skill_hiddens[i]}" = "true" ]; then
+      continue
+    fi
+    visible_indices+=("$i")
     if [ -n "${all_skill_descriptions[i]}" ]; then
       menu_options+=("${all_skill_names[i]} - ${all_skill_descriptions[i]}")
     else
       menu_options+=("${all_skill_names[i]}")
     fi
+    menu_defaults+=("${all_skill_defaults[i]}")
   done
 
   selected_indices=()
-  multi_select_menu "Select AI Agent skills to install/sync:" menu_options all_skill_defaults selected_indices
+  multi_select_menu "Select AI Agent skills to install/sync:" menu_options menu_defaults selected_indices
 
   if [ ${#selected_indices[@]} -eq 0 ]; then
     log_warn "No skills selected. Skipping skill synchronization."
@@ -160,12 +178,13 @@ elif [ -t 0 ] && [ -t 1 ]; then
   fi
 
   for idx in "${selected_indices[@]}"; do
-    selected_skill_paths+=("${all_skill_dirs[idx]}")
+    orig_idx="${visible_indices[idx]}"
+    selected_skill_paths+=("${all_skill_dirs[orig_idx]}")
   done
 else
-  # Non-interactive without arguments -> install skills where default: true
+  # Non-interactive without arguments -> install skills where default: true and not hidden
   for ((i=0; i<${#all_skill_dirs[@]}; i++)); do
-    if [ "${all_skill_defaults[i]}" = "true" ]; then
+    if [ "${all_skill_defaults[i]}" = "true" ] && [ "${all_skill_hiddens[i]}" != "true" ]; then
       selected_skill_paths+=("${all_skill_dirs[i]}")
     fi
   done

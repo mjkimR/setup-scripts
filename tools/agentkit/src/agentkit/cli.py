@@ -17,6 +17,7 @@ from .commands.commitcmd import commit_group
 from .commands.commitsafe import commit_safe
 from .commands.gitcmd import git_group
 from .commands.handoff import handoff
+from .commands.hookcmd import hook_group
 from .commands.scratch import scratch
 from .errors import Actor, Advisory, AgentkitError, ErrorCode, ExitCode, Retry
 
@@ -72,6 +73,8 @@ cli.add_command(handoff)
 cli.add_command(agy)
 cli.add_command(git_group)
 cli.add_command(scratch)
+cli.add_command(hook_group)
+commit_group.add_command(hook_group, name="hook")
 
 
 def main() -> None:

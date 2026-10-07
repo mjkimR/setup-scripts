@@ -78,7 +78,9 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
 
     if set_pairs:
         if cfg is None:
-            raise click.ClickException("Repository is not onboarded yet. Run `agentkit commit onboard` first.")
+            raise click.ClickException(
+                "Repository is not onboarded yet. Run `/git-commit-onboard` (or `agentkit commit onboard`) first."
+            )
 
         # Every pair is applied to the in-memory config before anything is
         # written, so a typo in the last one cannot leave the earlier ones
@@ -104,7 +106,7 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
     if cfg is None:
         path = repo_config_path()
         click.echo(f"[INFO] No repository commit config found at: {path}")
-        click.echo("[INFO] Run `agentkit commit onboard` to initialize per-repository configuration.")
+        click.echo("[INFO] Run `/git-commit-onboard` (or `agentkit commit onboard`) to initialize configuration.")
         return
 
     if as_json:
@@ -147,18 +149,56 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
             click.echo(f"- {rule}")
 
 
+@commit_group.command("conventions")
+@click.option("--json", "as_json", is_flag=True, help="Print conventions as JSON.")
+def commit_conventions(as_json: bool) -> None:
+    """Print repository commit conventions, template, and rules without diffs."""
+    cfg = load_repo_config()
+    if cfg is None:
+        raise click.ClickException(
+            "Repository is not onboarded yet. Run `/git-commit-onboard` (or `agentkit commit onboard`) first."
+        )
+    conv = cfg.conventions
+    if as_json:
+        data = {
+            "language": conv.language,
+            "style": conv.style,
+            "template": conv.template,
+            "rules": conv.rules,
+            "strip_co_authored_by": conv.strip_co_authored_by,
+        }
+        click.echo(json.dumps(data, indent=2, ensure_ascii=False))
+        return
+
+    click.echo(f"Language: {conv.language}")
+    click.echo(f"Style:    {conv.style}")
+    click.echo("\n--- Template ---")
+    click.echo(conv.template)
+    if conv.rules:
+        click.echo("\n--- Rules ---")
+        for rule in conv.rules:
+            click.echo(f"- {rule}")
+
+
 @commit_group.command("context")
 @click.option("--mode", type=click.Choice(["low", "default", "high"]), default="default", show_default=True)
+@click.option("--conventions-only", is_flag=True, help="Only print conventions and template without staged diff.")
 @click.pass_context
-def commit_context(ctx: click.Context, mode: str) -> None:
+def commit_context(ctx: click.Context, mode: str, conventions_only: bool) -> None:
     """Print commit conventions and staged changes without staging or committing.
 
     Low keeps the full path inventory but previews at most 200 patch lines and
     16000 characters. Default and high print the complete patch.
     """
+    if conventions_only:
+        ctx.invoke(commit_conventions, as_json=False)
+        return
+
     root = gitutil.repo_root()
     if load_repo_config() is None:
-        raise click.ClickException("Repository is not onboarded yet. Run `agentkit commit onboard` first.")
+        raise click.ClickException(
+            "Repository is not onboarded yet. Run `/git-commit-onboard` (or `agentkit commit onboard`) first."
+        )
     # Disable external diff/textconv helpers: this is an index snapshot, not a
     # request to execute repository-defined diff programs.
     diff_args = ["diff", "--cached", "--no-ext-diff", "--no-textconv", "--no-color"]
@@ -202,7 +242,7 @@ def verify(ctx: click.Context, only: str | None) -> None:
     """
     cfg = load_repo_config()
     if cfg is None:
-        click.echo("[verify] [INFO] Repository is not onboarded; nothing to verify.")
+        click.echo("[verify] [INFO] Repository is not onboarded. Run `/git-commit-onboard` to configure.")
         return
     if not cfg.verify.enabled:
         click.echo("[verify] [SKIP] Disabled by verify.enabled=false — commits proceed unverified by design.")
@@ -226,8 +266,40 @@ def verify(ctx: click.Context, only: str | None) -> None:
     click.echo(f"[verify] [OK] {', '.join(name for name, _ in commands)} passed.")
 
 
+def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
+    click.echo(title)
+    click.echo(
+        f"  • Whitelist:   {'[ON]' if cfg.whitelist.enabled else '[OFF]'} ({', '.join(cfg.whitelist.allowed_emails)})"
+    )
+    click.echo(
+        f"  • Timeline:    {'[ON]' if cfg.timeline.enabled else '[OFF]'} ({cfg.timeline.start}~{cfg.timeline.end} {cfg.timeline.timezone})"
+    )
+    click.echo(f"  • Language:    {cfg.conventions.language}")
+    click.echo(f"  • Style:       {cfg.conventions.style}")
+    click.echo(f"  • Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
+    click.echo(f"  • Hooks:       {cfg.hooks.policy}")
+    click.echo(
+        f"  • Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
+        f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
+    )
+    click.echo(
+        f"  • Guards:      {'[ON]' if cfg.guards.enabled else '[OFF]'} "
+        f"secret scan on, no protected branches "
+        f"(set with `agentkit commit config --set guards.protected_branches=main`)"
+    )
+    click.echo(
+        f"  • Push:        {'[ON]' if cfg.push.enabled else '[OFF]'} "
+        f"remote: {cfg.push.remote or '(default)'} | branch: {cfg.push.branch or '(current)'}"
+    )
+
+
 @commit_group.command("onboard")
 @click.option("--force", is_flag=True, help="Overwrite an existing repository configuration.")
+@click.option(
+    "--update",
+    is_flag=True,
+    help="Update existing repository configuration: preserve current values, apply specified options, and install missing hooks.",
+)
 @click.option("--whitelist/--no-whitelist", default=None, help="Enable or disable identity whitelist check.")
 @click.option("--timeline/--no-timeline", default=None, help="Enable or disable commit timestamp resolution.")
 @click.option("--language", type=click.Choice(["ko", "en"]), default=None, help="Preferred commit language.")
@@ -283,8 +355,17 @@ def verify(ctx: click.Context, only: str | None) -> None:
     default=None,
     help="Branch to push to. Defaults to current branch.",
 )
+@click.option(
+    "--install-hooks/--no-install-hooks",
+    default=True,
+    show_default=True,
+    help="Install git hooks (pre-commit, commit-msg, post-commit) into .git/hooks.",
+)
+@click.pass_context
 def onboard(
+    ctx: click.Context,
     force: bool,
+    update: bool,
     whitelist: bool | None,
     timeline: bool | None,
     language: str | None,
@@ -300,12 +381,64 @@ def onboard(
     push_enabled: bool | None,
     push_remote: str | None,
     push_branch: str | None,
+    install_hooks: bool = True,
 ) -> None:
     """Initialize or update repository commit configuration with auto-detected defaults."""
     existing = load_repo_config()
-    if existing and not force:
+    if existing and not force and not update:
         click.echo(f"[INFO] Repository is already onboarded: {existing.path}")
-        click.echo("[INFO] Re-run with --force to overwrite, or use `agentkit commit config --set KEY=VALUE`.")
+        click.echo(
+            "[INFO] Re-run with --update to preserve settings and install missing hooks, or --force to overwrite completely."
+        )
+        return
+
+    if existing and update and not force:
+        # Incremental update: preserve existing config, apply only explicitly provided options
+        if whitelist is not None:
+            existing.whitelist.enabled = whitelist
+        if emails:
+            existing.whitelist.allowed_emails = list(emails)
+
+        if timeline is not None:
+            existing.timeline.enabled = timeline
+        if start is not None:
+            existing.timeline.start = start
+        if end is not None:
+            existing.timeline.end = end
+
+        if language is not None:
+            existing.conventions.language = language
+        if style is not None:
+            existing.conventions.style = style
+        if strip_co_authored_by is not None:
+            existing.conventions.strip_co_authored_by = strip_co_authored_by
+
+        if hooks_policy is not None:
+            ensure_supported_hooks_policy(hooks_policy)
+            existing.hooks.policy = hooks_policy
+
+        if verify_enabled is not None:
+            existing.verify.enabled = verify_enabled
+        if test_cmd is not None:
+            existing.verify.test = test_cmd
+        if lint_cmd is not None:
+            existing.verify.lint = lint_cmd
+
+        if push_enabled is not None:
+            existing.push.enabled = push_enabled
+        if push_remote is not None:
+            existing.push.remote = push_remote
+        if push_branch is not None:
+            existing.push.branch = push_branch
+
+        cfg = existing
+        save_repo_config(cfg)
+        _print_onboard_summary(cfg, f"[SUCCESS] Updated repository commit configuration at {cfg.path}")
+
+        if install_hooks:
+            from .hookcmd import install as install_hooks_cmd
+
+            ctx.invoke(install_hooks_cmd)
         return
 
     analysis = analyze_repo_history()
@@ -355,30 +488,12 @@ def onboard(
     )
 
     save_repo_config(cfg)
-    click.echo(f"[SUCCESS] Initialized repository commit configuration at {target_path}")
-    click.echo(
-        f"  • Whitelist:   {'[ON]' if cfg.whitelist.enabled else '[OFF]'} ({', '.join(cfg.whitelist.allowed_emails)})"
-    )
-    click.echo(
-        f"  • Timeline:    {'[ON]' if cfg.timeline.enabled else '[OFF]'} ({cfg.timeline.start}~{cfg.timeline.end} {cfg.timeline.timezone})"
-    )
-    click.echo(f"  • Language:    {cfg.conventions.language}")
-    click.echo(f"  • Style:       {cfg.conventions.style}")
-    click.echo(f"  • Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
-    click.echo(f"  • Hooks:       {cfg.hooks.policy}")
-    click.echo(
-        f"  • Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
-        f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
-    )
-    click.echo(
-        f"  • Guards:      {'[ON]' if cfg.guards.enabled else '[OFF]'} "
-        f"secret scan on, no protected branches "
-        f"(set with `agentkit commit config --set guards.protected_branches=main`)"
-    )
-    click.echo(
-        f"  • Push:        {'[ON]' if cfg.push.enabled else '[OFF]'} "
-        f"remote: {cfg.push.remote or '(default)'} | branch: {cfg.push.branch or '(current)'}"
-    )
+    _print_onboard_summary(cfg, f"[SUCCESS] Initialized repository commit configuration at {target_path}")
+
+    if install_hooks:
+        from .hookcmd import install as install_hooks_cmd
+
+        ctx.invoke(install_hooks_cmd)
 
 
 def _set_nested(cfg: RepoConfig, key: str, value: str) -> None:

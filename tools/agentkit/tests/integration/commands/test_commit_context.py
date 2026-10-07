@@ -134,3 +134,20 @@ def test_external_diff_helpers_are_not_executed(context_repo, monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "+plain diff" in result.output
+
+
+def test_commit_conventions_command(context_repo):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["commit", "conventions"])
+    assert result.exit_code == 0, result.output
+    assert "[type] subject" in result.output
+    assert "Keep intent clear" in result.output
+    assert "+plain diff" not in result.output
+
+
+def test_commit_context_conventions_only(context_repo):
+    runner = CliRunner()
+    result = runner.invoke(cli, ["commit", "context", "--conventions-only"])
+    assert result.exit_code == 0, result.output
+    assert "[type] subject" in result.output
+    assert "Keep intent clear" in result.output
