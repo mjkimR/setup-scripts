@@ -53,8 +53,9 @@ Present detected defaults and ask the user to confirm:
    - `test-cmd`: Test runner command (e.g. `uv run pytest -q`, `npm test`).
    - `lint-cmd`: Linter command (e.g. `ruff check`, `npm run lint`).
    - `verify.enabled`: Set to `false` if existing tests are currently broken and being fixed.
-7. **Git Hooks Installation**:
+7. **Git Hooks Installation & Verbosity**:
    - Install managed thin-wrapper hooks (`pre-commit`, `commit-msg`, `post-commit`) into `.git/hooks/`. (Default: YES).
+   - Hook output verbosity: `quiet` (Default, silent on success, trimmed tail on failure), `compact` (1-line tags), or `verbose`.
 8. **Auto-Push**: Automatic `git push` upon successful commit (Default: OFF).
 
 ### 4. Execute Onboarding & Hook Setup
@@ -70,6 +71,7 @@ agentkit commit onboard \
   [--lint-cmd "<command>"] \
   [--verify/--no-verify] \
   [--install-hooks/--no-install-hooks] \
+  [--hooks-verbosity <quiet|compact|verbose>] \
   [--push/--no-push]
 ```
 

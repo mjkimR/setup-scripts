@@ -45,6 +45,55 @@ def _get_hooks_dir(cwd: Path | None = None) -> Path:
     return hooks_dir
 
 
+def _resolve_verbosity(
+    cwd: Path | None = None,
+    is_verbose: bool | None = None,
+    is_quiet: bool | None = None,
+) -> str:
+    """Determine the hook verbosity level (quiet, compact, verbose).
+
+    Precedence:
+    1. CLI flags (--verbose / --quiet)
+    2. Environment variables: AGENTKIT_HOOK_VERBOSITY, AGENTKIT_VERBOSE, AGENTKIT_QUIET
+    3. Git config: agentkit.hooks.verbosity, agentkit.hooks.quiet
+    4. Repository config: cfg.hooks.verbosity
+    5. Default: "quiet"
+    """
+    if is_verbose:
+        return "verbose"
+    if is_quiet:
+        return "quiet"
+
+    env_verb = os.environ.get("AGENTKIT_HOOK_VERBOSITY")
+    if env_verb in ("quiet", "compact", "verbose"):
+        return env_verb
+    if os.environ.get("AGENTKIT_VERBOSE") == "1":
+        return "verbose"
+    if os.environ.get("AGENTKIT_QUIET") == "1":
+        return "quiet"
+
+    try:
+        root = gitutil.repo_root(cwd=cwd)
+    except Exception:
+        root = cwd or Path.cwd()
+
+    git_verb = gitutil.config_value("agentkit.hooks.verbosity", cwd=root)
+    if git_verb in ("quiet", "compact", "verbose"):
+        return git_verb
+
+    git_quiet = gitutil.config_bool("agentkit.hooks.quiet", cwd=root)
+    if git_quiet is False:
+        return "verbose"
+    elif git_quiet is True:
+        return "quiet"
+
+    cfg = load_repo_config(cwd=root)
+    if cfg is not None and getattr(cfg.hooks, "verbosity", None) in ("quiet", "compact", "verbose"):
+        return cfg.hooks.verbosity
+
+    return "quiet"
+
+
 @click.group("hook")
 def hook_group() -> None:
     """Manage and execute git repository hooks."""
@@ -134,9 +183,12 @@ def status() -> None:
 
 
 @hook_group.command("run-pre-commit")
-def run_pre_commit() -> None:
+@click.option("--verbose", "-v", "is_verbose", is_flag=True, default=False, help="Force verbose hook output.")
+@click.option("--quiet", "-q", "is_quiet", is_flag=True, default=False, help="Force quiet hook output.")
+def run_pre_commit(is_verbose: bool, is_quiet: bool) -> None:
     """Run pre-commit checks: whitelist, guardrails (branch, secrets, denied paths), and repo verify."""
     root = gitutil.repo_root()
+    verbosity = _resolve_verbosity(cwd=root, is_verbose=is_verbose, is_quiet=is_quiet)
 
     # 0. Whitelist / Identity check
     try:
@@ -171,23 +223,25 @@ def run_pre_commit() -> None:
     root = gitutil.repo_root()
     verify_override = gitutil.config_bool("agentkit.verify", cwd=root)
     if verify_override is False:
-        click.echo("[hook:pre-commit] [SKIP] Verification bypassed via git config (agentkit.verify=false)")
-        click.echo("[hook:pre-commit] [OK] All checks passed.")
+        if verbosity in ("compact", "verbose"):
+            click.echo("[hook:pre-commit] [SKIP] Verification bypassed via git config (agentkit.verify=false)")
+            click.echo("[hook:pre-commit] [OK] All checks passed.")
         return
 
-    cfg = load_repo_config()
+    cfg = load_repo_config(cwd=root)
     should_verify = (verify_override is True) or (cfg is not None and cfg.verify.enabled)
     if should_verify and cfg is not None:
         commands = cfg.verify.configured()
         if commands:
             # Check if this is an intermediate commit with bypass-intermediate policy
             if cfg.hooks.policy == "bypass-intermediate":
-                pending_changes = gitutil.pending()
+                pending_changes = gitutil.pending(cwd=root)
                 # If there are still unstaged or untracked changes, skip verification
                 has_unstaged = any(line[1:2] in ("M", "D", "?") or line.startswith("??") for line in pending_changes)
                 if has_unstaged:
-                    click.echo("[hook:pre-commit] [SKIP] Intermediate commit with policy=bypass-intermediate")
-                    click.echo("[hook:pre-commit] [OK] All checks passed.")
+                    if verbosity in ("compact", "verbose"):
+                        click.echo("[hook:pre-commit] [SKIP] Intermediate commit with policy=bypass-intermediate")
+                        click.echo("[hook:pre-commit] [OK] All checks passed.")
                     return
 
             # Clean git hook repository & transaction variables so test suites run in pristine isolation
@@ -211,19 +265,56 @@ def run_pre_commit() -> None:
 
             with gitutil.staged_snapshot(cwd=root):
                 for name, cmd in commands:
-                    click.echo(f"[hook:pre-commit] $ {cmd}")
-                    result = subprocess.run(cmd, shell=True, cwd=root, env=verify_env)
+                    if verbosity == "verbose":
+                        click.echo(f"[hook:pre-commit] $ {cmd}")
+                        result = subprocess.run(cmd, shell=True, cwd=root, env=verify_env)
+                    else:
+                        result = subprocess.run(
+                            cmd, shell=True, cwd=root, env=verify_env, capture_output=True, text=True
+                        )
+
                     if result.returncode != 0:
-                        click.echo(f"[hook:pre-commit] [FAIL] {name} failed (exit {result.returncode}).", err=True)
+                        click.echo(
+                            f"[hook:pre-commit] [FAIL] '{name}' check failed (exit {result.returncode}).",
+                            err=True,
+                        )
+                        click.echo(f"$ {cmd}", err=True)
+                        output_parts = []
+                        if hasattr(result, "stdout") and result.stdout:
+                            output_parts.append(result.stdout.strip())
+                        if hasattr(result, "stderr") and result.stderr:
+                            output_parts.append(result.stderr.strip())
+                        output = "\n".join(p for p in output_parts if p).strip()
+                        if output:
+                            lines = output.splitlines()
+                            if len(lines) > 25:
+                                click.echo(f"--- Output (last 25 lines of {len(lines)}) ---", err=True)
+                                click.echo("\n".join(lines[-25:]), err=True)
+                            else:
+                                click.echo(output, err=True)
+                        click.echo(f"\n[hint] To re-run this check directly: {cmd}", err=True)
+                        click.echo(
+                            "[hint] To bypass verify for intermediate commit: git -c agentkit.verify=false commit -m '...'",
+                            err=True,
+                        )
                         sys.exit(result.returncode)
 
-    click.echo("[hook:pre-commit] [OK] All checks passed.")
+                    if verbosity == "compact":
+                        click.echo(f"[hook:pre-commit] ✓ {name} passed")
+
+    if verbosity in ("compact", "verbose"):
+        click.echo("[hook:pre-commit] [OK] All checks passed.")
 
 
 @hook_group.command("run-commit-msg")
 @click.argument("msg_file", type=click.Path(exists=True, path_type=Path))
-def run_commit_msg(msg_file: Path) -> None:
+@click.option("--verbose", "-v", "is_verbose", is_flag=True, default=False, help="Force verbose hook output.")
+@click.option("--quiet", "-q", "is_quiet", is_flag=True, default=False, help="Force quiet hook output.")
+def run_commit_msg(msg_file: Path, is_verbose: bool, is_quiet: bool) -> None:
     """Validate commit message format and conventions."""
+    root = gitutil.repo_root()
+    verbosity = _resolve_verbosity(cwd=root, is_verbose=is_verbose, is_quiet=is_quiet)
+
     raw_text = msg_file.read_text(encoding="utf-8")
     lines = [line.strip() for line in raw_text.splitlines() if not line.strip().startswith("#")]
     non_empty = [line for line in lines if line]
@@ -233,7 +324,7 @@ def run_commit_msg(msg_file: Path) -> None:
         sys.exit(1)
 
     header = non_empty[0]
-    cfg = load_repo_config()
+    cfg = load_repo_config(cwd=root)
     if cfg is not None and cfg.conventions.style.lower() == "conventional" and not CONVENTIONAL_PATTERN.match(header):
         click.echo(
             f"[hook:commit-msg] [WARN] Commit header '{header}' does not follow conventional commit pattern "
@@ -243,17 +334,22 @@ def run_commit_msg(msg_file: Path) -> None:
         # We warn rather than hard-block to avoid blocking manual amends or merge commits,
         # but it clearly informs the developer/agent.
 
-    click.echo("[hook:commit-msg] [OK] Commit message verified.")
+    if verbosity in ("compact", "verbose"):
+        click.echo("[hook:commit-msg] [OK] Commit message verified.")
 
 
 @hook_group.command("run-post-commit")
-def run_post_commit() -> None:
+@click.option("--verbose", "-v", "is_verbose", is_flag=True, default=False, help="Force verbose hook output.")
+@click.option("--quiet", "-q", "is_quiet", is_flag=True, default=False, help="Force quiet hook output.")
+def run_post_commit(is_verbose: bool, is_quiet: bool) -> None:
     """Run post-commit actions: apply virtual timeline timestamp if enabled."""
     # Avoid infinite recursion during git commit --amend
     if os.environ.get("AGENTKIT_POST_COMMIT_AMENDING") == "1":
         return
 
     root = gitutil.repo_root()
+    verbosity = _resolve_verbosity(cwd=root, is_verbose=is_verbose, is_quiet=is_quiet)
+
     repo_cfg = load_repo_config(cwd=root)
     if repo_cfg is None or not repo_cfg.timeline.enabled:
         return
@@ -270,7 +366,8 @@ def run_post_commit() -> None:
             return
 
         stamp_str = stamp.format()
-        click.echo(f"[hook:post-commit] Applying virtual timeline: {stamp_str}")
+        if verbosity in ("compact", "verbose"):
+            click.echo(f"[hook:post-commit] Applying virtual timeline: {stamp_str}")
 
         amend_env = {
             **os.environ,

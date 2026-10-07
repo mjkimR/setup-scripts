@@ -12,8 +12,10 @@ from .. import gitutil
 from ..repoconfig import (
     DEFAULT_END,
     DEFAULT_HOOKS_POLICY,
+    DEFAULT_HOOKS_VERBOSITY,
     DEFAULT_START,
     HOOKS_POLICIES,
+    HOOKS_VERBOSITIES,
     ConventionConfig,
     HooksConfig,
     PushConfig,
@@ -23,6 +25,7 @@ from ..repoconfig import (
     WhitelistConfig,
     analyze_repo_history,
     ensure_supported_hooks_policy,
+    ensure_supported_hooks_verbosity,
     load_repo_config,
     repo_config_path,
     save_repo_config,
@@ -99,6 +102,8 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
         # runner would refuse at handoff time anyway.
         if any(key == "hooks.policy" for key, _ in applied):
             ensure_supported_hooks_policy(cfg.hooks.policy)
+        if any(key == "hooks.verbosity" for key, _ in applied):
+            ensure_supported_hooks_verbosity(cfg.hooks.verbosity)
         save_repo_config(cfg)
         for key, value in applied:
             click.echo(f"[SUCCESS] Updated {key} = {value}")
@@ -124,7 +129,7 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
     click.echo(f"  Language:    {cfg.conventions.language}")
     click.echo(f"  Style:       {cfg.conventions.style}")
     click.echo(f"  Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
-    click.echo(f"  Hooks:       {cfg.hooks.policy}")
+    click.echo(f"  Hooks:       policy={cfg.hooks.policy}, verbosity={cfg.hooks.verbosity}")
     click.echo(
         f"  Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
         f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
@@ -277,7 +282,7 @@ def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
     click.echo(f"  • Language:    {cfg.conventions.language}")
     click.echo(f"  • Style:       {cfg.conventions.style}")
     click.echo(f"  • Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
-    click.echo(f"  • Hooks:       {cfg.hooks.policy}")
+    click.echo(f"  • Hooks:       policy={cfg.hooks.policy}, verbosity={cfg.hooks.verbosity}")
     click.echo(
         f"  • Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
         f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
@@ -319,6 +324,12 @@ def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
     type=click.Choice(HOOKS_POLICIES),
     default=None,
     help=(f"Git-hook policy. [default: {DEFAULT_HOOKS_POLICY}] run-all is reserved and fails as not implemented."),
+)
+@click.option(
+    "--hooks-verbosity",
+    type=click.Choice(list(HOOKS_VERBOSITIES)),
+    default=None,
+    help=f"Git-hook output verbosity (quiet, compact, verbose). [default: {DEFAULT_HOOKS_VERBOSITY}]",
 )
 @click.option(
     "--test-cmd",
@@ -375,6 +386,7 @@ def onboard(
     start: str | None,
     end: str | None,
     hooks_policy: str | None,
+    hooks_verbosity: str | None,
     test_cmd: str | None,
     lint_cmd: str | None,
     verify_enabled: bool | None,
@@ -417,6 +429,10 @@ def onboard(
             ensure_supported_hooks_policy(hooks_policy)
             existing.hooks.policy = hooks_policy
 
+        if hooks_verbosity is not None:
+            ensure_supported_hooks_verbosity(hooks_verbosity)
+            existing.hooks.verbosity = hooks_verbosity
+
         if verify_enabled is not None:
             existing.verify.enabled = verify_enabled
         if test_cmd is not None:
@@ -456,6 +472,9 @@ def onboard(
     # The Choice already filters unknown values; this closes the reserved one.
     ensure_supported_hooks_policy(final_hooks_policy)
 
+    final_hooks_verbosity = hooks_verbosity or DEFAULT_HOOKS_VERBOSITY
+    ensure_supported_hooks_verbosity(final_hooks_verbosity)
+
     target_path = repo_config_path()
     cfg = RepoConfig(
         path=target_path,
@@ -474,7 +493,7 @@ def onboard(
             template=final_template,
             strip_co_authored_by=strip_co_authored_by,
         ),
-        hooks=HooksConfig(policy=final_hooks_policy),
+        hooks=HooksConfig(policy=final_hooks_policy, verbosity=final_hooks_verbosity),
         verify=VerifyConfig(
             enabled=True if verify_enabled is None else verify_enabled,
             test=test_cmd or "",

@@ -64,12 +64,15 @@ class ConventionConfig:
 # nothing implements the grouping constraints it would impose.
 HOOKS_POLICIES = ("bypass-intermediate", "run-all")
 DEFAULT_HOOKS_POLICY = "bypass-intermediate"
+HOOKS_VERBOSITIES = ("quiet", "compact", "verbose")
+DEFAULT_HOOKS_VERBOSITY = "quiet"
 
 
 @dataclass
 class HooksConfig:
     policy: str = DEFAULT_HOOKS_POLICY
     installed: bool = False
+    verbosity: str = DEFAULT_HOOKS_VERBOSITY
 
 
 @dataclass
@@ -148,6 +151,16 @@ def ensure_supported_hooks_policy(policy: str) -> None:
                 "bypass-intermediate or wait for the feature."
             ),
             details=["The option is reserved on purpose — choosing it must fail loudly, not silently degrade."],
+        )
+
+
+def ensure_supported_hooks_verbosity(verbosity: str) -> None:
+    """Reject unknown hook verbosity levels."""
+    if verbosity not in HOOKS_VERBOSITIES:
+        raise ConfigError(
+            f"unknown hooks.verbosity: {verbosity!r} (valid: {', '.join(HOOKS_VERBOSITIES)}).",
+            fix=f"agentkit commit config --set hooks.verbosity={DEFAULT_HOOKS_VERBOSITY}",
+            what_to_report="The repository's hooks.verbosity value is invalid.",
         )
 
 
@@ -305,6 +318,7 @@ class RepoConfig:
             hooks=HooksConfig(
                 policy=hooks_data.get("policy", DEFAULT_HOOKS_POLICY),
                 installed=bool(hooks_data.get("installed", False)),
+                verbosity=hooks_data.get("verbosity", DEFAULT_HOOKS_VERBOSITY),
             ),
             verify=VerifyConfig(
                 enabled=verify_data.get("enabled", True),

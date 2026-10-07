@@ -81,9 +81,15 @@ def test_run_pre_commit_passes_clean_repo(hook_repo):
     (hook_repo / "clean.txt").write_text("ordinary text\n")
     git("add", "clean.txt")
 
+    # Quiet by default: no stdout noise on success
     result = runner.invoke(cli, ["hook", "run-pre-commit"])
     assert result.exit_code == 0
-    assert "[OK] All checks passed." in result.output
+    assert result.output.strip() == ""
+
+    # Verbose mode: prints ok status
+    result_verbose = runner.invoke(cli, ["hook", "run-pre-commit", "--verbose"])
+    assert result_verbose.exit_code == 0
+    assert "[OK] All checks passed." in result_verbose.output
 
 
 def test_run_pre_commit_blocks_secret(hook_repo):
@@ -115,16 +121,22 @@ def test_run_commit_msg_valid_succeeds(hook_repo):
     msg_path = hook_repo / "good_msg.txt"
     msg_path.write_text("feat: add new feature\n\nDetailed explanation here.\n")
 
+    # Quiet by default: silent on valid message
     result = runner.invoke(cli, ["hook", "run-commit-msg", str(msg_path)])
     assert result.exit_code == 0
-    assert "[OK] Commit message verified." in result.output
+    assert result.output.strip() == ""
+
+    # Verbose mode: reports verified
+    result_verbose = runner.invoke(cli, ["hook", "run-commit-msg", str(msg_path), "--verbose"])
+    assert result_verbose.exit_code == 0
+    assert "[OK] Commit message verified." in result_verbose.output
 
 
 def test_run_pre_commit_isolates_staged_changes(hook_repo):
     runner = CliRunner()
-    # Create initial commit so git stash can operate
-    (hook_repo / "init.txt").write_text("init\n")
-    git("add", "init.txt")
+    test_file = hook_repo / "file.py"
+    test_file.write_text("print('clean')\n")
+    git("add", "file.py")
     git("commit", "-m", "initial commit")
 
     cfg = RepoConfig(
@@ -138,16 +150,15 @@ def test_run_pre_commit_isolates_staged_changes(hook_repo):
     )
     save_repo_config(cfg)
 
-    # Staged content is clean
-    test_file = hook_repo / "file.py"
-    test_file.write_text("print('clean')\n")
+    # Staged change is clean
+    test_file.write_text("print('clean modified')\n")
     git("add", "file.py")
 
     # Working tree has unstaged broken changes
     test_file.write_text("print('BROKEN')\n")
 
     # Pre-commit should pass because staged changes are isolated
-    result = runner.invoke(cli, ["hook", "run-pre-commit"])
+    result = runner.invoke(cli, ["hook", "run-pre-commit", "--verbose"])
     assert result.exit_code == 0
     assert "[OK] All checks passed." in result.output
 
@@ -173,10 +184,16 @@ def test_run_pre_commit_bypassed_via_git_config(hook_repo):
 
     git("config", "agentkit.verify", "false")
 
+    # Quiet by default
     result = runner.invoke(cli, ["hook", "run-pre-commit"])
     assert result.exit_code == 0
-    assert "Verification bypassed via git config" in result.output
-    assert "[OK] All checks passed." in result.output
+    assert result.output.strip() == ""
+
+    # Verbose mode reports bypass reason
+    result_verbose = runner.invoke(cli, ["hook", "run-pre-commit", "--verbose"])
+    assert result_verbose.exit_code == 0
+    assert "Verification bypassed via git config" in result_verbose.output
+    assert "[OK] All checks passed." in result_verbose.output
 
 
 def test_run_pre_commit_blocks_unauthorized_email(hook_repo):
@@ -212,13 +229,19 @@ def test_run_post_commit_applies_timeline(hook_repo):
     git("add", "clean.txt")
     git("commit", "-m", "feat: initial commit")
 
+    # Quiet by default: silent
     result = runner.invoke(cli, ["hook", "run-post-commit"])
     assert result.exit_code == 0
-    assert "[hook:post-commit] Applying virtual timeline" in result.output
+    assert result.output.strip() == ""
 
     commit_date = git("log", "-1", "--format=%cd", "--date=format:%H:%M").strip()
     hour = int(commit_date.split(":")[0])
     assert 19 <= hour <= 23
+
+    # Verbose mode prints notification
+    result_verbose = runner.invoke(cli, ["hook", "run-post-commit", "--verbose"])
+    assert result_verbose.exit_code == 0
+    assert "[hook:post-commit] Applying virtual timeline" in result_verbose.output
 
 
 def test_git_commit_triggers_post_commit_timeline_automatically(hook_repo):
@@ -241,3 +264,51 @@ def test_git_commit_triggers_post_commit_timeline_automatically(hook_repo):
     commit_date = git("log", "-1", "--format=%cd", "--date=format:%H:%M").strip()
     hour = int(commit_date.split(":")[0])
     assert 19 <= hour <= 23
+
+
+def test_run_pre_commit_distills_failed_verify_output(hook_repo):
+    runner = CliRunner()
+    script = (
+        "python3 -c \""
+        "import sys; "
+        "[print(f'passing step {i}') for i in range(50)]; "
+        "sys.stderr.write('fatal test failure: assertion failed\\n'); "
+        "sys.exit(1)\""
+    )
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True, verbosity="quiet"),
+        verify=VerifyConfig(enabled=True, test=script),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+
+    result = runner.invoke(cli, ["hook", "run-pre-commit"])
+    assert result.exit_code != 0
+    assert "[hook:pre-commit] [FAIL] 'test' check failed" in result.output
+    assert "--- Output (last 25 lines of" in result.output
+    assert "fatal test failure: assertion failed" in result.output
+    assert "[hint] To re-run this check directly" in result.output
+    assert "[hint] To bypass verify for intermediate commit" in result.output
+
+
+def test_run_pre_commit_compact_mode(hook_repo):
+    runner = CliRunner()
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True, verbosity="compact"),
+        verify=VerifyConfig(enabled=True, test="python3 -c 'print(\"ok\")'"),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+
+    result = runner.invoke(cli, ["hook", "run-pre-commit"])
+    assert result.exit_code == 0
+    assert "✓ test passed" in result.output
+    assert "[hook:pre-commit] [OK] All checks passed." in result.output
