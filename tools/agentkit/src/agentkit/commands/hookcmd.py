@@ -258,11 +258,6 @@ def run_post_commit() -> None:
     if repo_cfg is None or not repo_cfg.timeline.enabled:
         return
 
-    # If author/committer date was explicitly provided from outside, preserve it
-    inherited = [name for name in ("GIT_AUTHOR_DATE", "GIT_COMMITTER_DATE") if name in os.environ]
-    if inherited:
-        return
-
     # Check git config override to bypass timeline (e.g. git -c agentkit.timeline=false commit ...)
     timeline_override = gitutil.config_bool("agentkit.timeline", cwd=root)
     if timeline_override is False:
@@ -280,8 +275,12 @@ def run_post_commit() -> None:
         amend_env = {
             **os.environ,
             "AGENTKIT_POST_COMMIT_AMENDING": "1",
+            "GIT_AUTHOR_DATE": stamp_str,
             "GIT_COMMITTER_DATE": stamp_str,
         }
+        for git_var in ("GIT_INDEX_FILE", "GIT_DIR", "GIT_WORK_TREE", "GIT_PREFIX"):
+            amend_env.pop(git_var, None)
+
         result = subprocess.run(
             ["git", "commit", "--amend", "--no-edit", "--no-verify", f"--date={stamp_str}"],
             cwd=str(root),

@@ -219,3 +219,25 @@ def test_run_post_commit_applies_timeline(hook_repo):
     commit_date = git("log", "-1", "--format=%cd", "--date=format:%H:%M").strip()
     hour = int(commit_date.split(":")[0])
     assert 19 <= hour <= 23
+
+
+def test_git_commit_triggers_post_commit_timeline_automatically(hook_repo):
+    runner = CliRunner()
+    # Install hooks including post-commit
+    runner.invoke(cli, ["hook", "install"])
+
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        timeline=TimelineConfig(enabled=True, start="19:00", end="23:00", timezone="Asia/Seoul"),
+        hooks=HooksConfig(policy="strict", installed=True),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: auto post commit")
+
+    commit_date = git("log", "-1", "--format=%cd", "--date=format:%H:%M").strip()
+    hour = int(commit_date.split(":")[0])
+    assert 19 <= hour <= 23
