@@ -14,6 +14,7 @@ import click
 from .. import gitutil
 from ..commitsafe import checked_identity, resolve
 from ..commitsafe import guards as guards_module
+from ..commitsafe.message import strip_co_authored_by as clean_co_authors
 from ..errors import AgentkitError
 from ..repoconfig import common_git_dir, load_repo_config, save_repo_config
 
@@ -308,14 +309,48 @@ def run_pre_commit(is_verbose: bool, is_quiet: bool) -> None:
 
 @hook_group.command("run-commit-msg")
 @click.argument("msg_file", type=click.Path(exists=True, path_type=Path))
+@click.option(
+    "--strip-co-authored-by/--no-strip-co-authored-by",
+    "strip_co_authored_by",
+    default=None,
+    help="Strip Co-Authored-By lines from commit message.",
+)
 @click.option("--verbose", "-v", "is_verbose", is_flag=True, default=False, help="Force verbose hook output.")
 @click.option("--quiet", "-q", "is_quiet", is_flag=True, default=False, help="Force quiet hook output.")
-def run_commit_msg(msg_file: Path, is_verbose: bool, is_quiet: bool) -> None:
-    """Validate commit message format and conventions."""
+def run_commit_msg(
+    msg_file: Path,
+    strip_co_authored_by: bool | None,
+    is_verbose: bool,
+    is_quiet: bool,
+) -> None:
+    """Validate commit message format and conventions, stripping co-authors if configured."""
     root = gitutil.repo_root()
     verbosity = _resolve_verbosity(cwd=root, is_verbose=is_verbose, is_quiet=is_quiet)
 
+    cfg = load_repo_config(cwd=root)
+    if strip_co_authored_by is not None:
+        should_strip = strip_co_authored_by
+    else:
+        strip_override = gitutil.config_bool("agentkit.strip-co-authored-by", cwd=root)
+        if strip_override is None:
+            strip_override = gitutil.config_bool("agentkit.strip_co_authored_by", cwd=root)
+        if strip_override is not None:
+            should_strip = strip_override
+        elif cfg is not None:
+            should_strip = cfg.conventions.strip_co_authored_by
+        else:
+            should_strip = True
+
     raw_text = msg_file.read_text(encoding="utf-8")
+    if should_strip:
+        cleaned = clean_co_authors(raw_text)
+        if cleaned != raw_text:
+            new_content = f"{cleaned}\n" if cleaned else ""
+            msg_file.write_text(new_content, encoding="utf-8")
+            raw_text = new_content
+            if verbosity in ("compact", "verbose"):
+                click.echo("[hook:commit-msg] Stripped Co-Authored-By trailer(s).")
+
     lines = [line.strip() for line in raw_text.splitlines() if not line.strip().startswith("#")]
     non_empty = [line for line in lines if line]
 
@@ -324,7 +359,6 @@ def run_commit_msg(msg_file: Path, is_verbose: bool, is_quiet: bool) -> None:
         sys.exit(1)
 
     header = non_empty[0]
-    cfg = load_repo_config(cwd=root)
     if cfg is not None and cfg.conventions.style.lower() == "conventional" and not CONVENTIONAL_PATTERN.match(header):
         click.echo(
             f"[hook:commit-msg] [WARN] Commit header '{header}' does not follow conventional commit pattern "
@@ -378,7 +412,9 @@ def _handle_auto_push(repo_cfg, root: Path, verbosity: str) -> None:
     ):
         push_env.pop(git_var, None)
 
-    target_desc = f"{repo_cfg.push.remote or 'default remote'}{(' ' + repo_cfg.push.branch) if repo_cfg.push.branch else ''}"
+    target_desc = (
+        f"{repo_cfg.push.remote or 'default remote'}{(' ' + repo_cfg.push.branch) if repo_cfg.push.branch else ''}"
+    )
     push_res = subprocess.run(
         push_argv,
         cwd=str(root),
@@ -438,7 +474,9 @@ def run_post_commit(is_verbose: bool, is_quiet: bool) -> None:
                         text=True,
                     )
                     if result.returncode != 0:
-                        click.echo(f"[hook:post-commit] [WARN] Failed to apply timeline: {result.stderr.strip()}", err=True)
+                        click.echo(
+                            f"[hook:post-commit] [WARN] Failed to apply timeline: {result.stderr.strip()}", err=True
+                        )
             except Exception as error:
                 click.echo(f"[hook:post-commit] [WARN] Timeline post-commit failed: {error}", err=True)
 

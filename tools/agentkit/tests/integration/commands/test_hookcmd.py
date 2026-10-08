@@ -133,6 +133,59 @@ def test_run_commit_msg_valid_succeeds(hook_repo):
     assert "[OK] Commit message verified." in result_verbose.output
 
 
+def test_run_commit_msg_strips_co_authored_by(hook_repo):
+    runner = CliRunner()
+    msg_path = hook_repo / "msg_with_coauthor.txt"
+    msg_path.write_text("feat: new feature\n\nDetailed info.\n\nCo-Authored-By: Helper <helper@example.com>\n")
+
+    result = runner.invoke(cli, ["hook", "run-commit-msg", str(msg_path), "--verbose"])
+    assert result.exit_code == 0
+    assert "Stripped Co-Authored-By trailer(s)." in result.output
+    assert msg_path.read_text() == "feat: new feature\n\nDetailed info.\n"
+
+
+def test_run_commit_msg_preserves_co_authored_by_when_disabled(hook_repo):
+    runner = CliRunner()
+    msg_path = hook_repo / "msg_with_coauthor.txt"
+    original = "feat: new feature\n\nCo-Authored-By: Helper <helper@example.com>\n"
+    msg_path.write_text(original)
+
+    # 1. Disabled via CLI option
+    result = runner.invoke(cli, ["hook", "run-commit-msg", str(msg_path), "--no-strip-co-authored-by"])
+    assert result.exit_code == 0
+    assert msg_path.read_text() == original
+
+    # 2. Disabled via git config
+    git("config", "agentkit.strip-co-authored-by", "false")
+    result = runner.invoke(cli, ["hook", "run-commit-msg", str(msg_path)])
+    assert result.exit_code == 0
+    assert msg_path.read_text() == original
+
+
+def test_run_commit_msg_co_authored_by_only_fails(hook_repo):
+    runner = CliRunner()
+    msg_path = hook_repo / "coauthor_only.txt"
+    msg_path.write_text("Co-Authored-By: Helper <helper@example.com>\n")
+
+    result = runner.invoke(cli, ["hook", "run-commit-msg", str(msg_path)])
+    assert result.exit_code != 0
+    assert "Commit message cannot be empty" in result.output
+
+
+def test_git_commit_strips_co_authored_by_via_managed_hook(hook_repo):
+    runner = CliRunner()
+    runner.invoke(cli, ["hook", "install"])
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: test feature\n\nCo-Authored-By: Bot <bot@example.com>")
+
+    log_msg = git("log", "-1", "--format=%B").strip()
+    assert "feat: test feature" in log_msg
+    assert "Co-Authored-By" not in log_msg
+    assert "bot@example.com" not in log_msg
+
+
 def test_run_pre_commit_isolates_staged_changes(hook_repo):
     runner = CliRunner()
     test_file = hook_repo / "file.py"
@@ -270,11 +323,11 @@ def test_git_commit_triggers_post_commit_timeline_automatically(hook_repo):
 def test_run_pre_commit_distills_failed_verify_output(hook_repo):
     runner = CliRunner()
     script = (
-        "python3 -c \""
+        'python3 -c "'
         "import sys; "
         "[print(f'passing step {i}') for i in range(50)]; "
         "sys.stderr.write('fatal test failure: assertion failed\\n'); "
-        "sys.exit(1)\""
+        'sys.exit(1)"'
     )
     cfg = RepoConfig(
         path=repo_config_path(),
