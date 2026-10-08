@@ -396,6 +396,16 @@ def _handle_auto_push(repo_cfg, root: Path, verbosity: str) -> None:
             click.echo("[hook:post-commit] [SKIP] Auto-push bypassed via git config (agentkit.push=false)")
         return
 
+    # When no explicit target branch is configured, git pushes the current branch.
+    # Skip auto-push if current branch has no upstream tracking branch
+    # unless push.autoSetupRemote is enabled.
+    if not repo_cfg.push.branch:
+        auto_setup = gitutil.config_bool("push.autoSetupRemote", cwd=root)
+        if not auto_setup and not gitutil.has_upstream(cwd=root):
+            if verbosity in ("compact", "verbose"):
+                click.echo("[hook:post-commit] [SKIP] Auto-push skipped: no upstream branch configured")
+            return
+
     push_argv = ["git", "push"]
     if repo_cfg.push.remote:
         push_argv.append(repo_cfg.push.remote)
@@ -425,8 +435,13 @@ def _handle_auto_push(repo_cfg, root: Path, verbosity: str) -> None:
     if push_res.returncode == 0:
         click.echo(f"[hook:post-commit] [PUSH] Auto-pushed to {target_desc}.")
     else:
-        click.echo(f"[hook:post-commit] [ERROR] Auto-push failed: {push_res.stderr.strip()}", err=True)
-        click.echo(f"[hint] To push manually: {' '.join(push_argv)}", err=True)
+        err_msg = push_res.stderr.strip()
+        if "no upstream branch" in err_msg.lower():
+            if verbosity in ("compact", "verbose"):
+                click.echo("[hook:post-commit] [SKIP] Auto-push skipped: no upstream branch configured")
+        else:
+            click.echo(f"[hook:post-commit] [ERROR] Auto-push failed: {err_msg}", err=True)
+            click.echo(f"[hint] To push manually: {' '.join(push_argv)}", err=True)
 
 
 @hook_group.command("run-post-commit")

@@ -28,6 +28,7 @@ Stage intended changes and create a git commit.
 - **Auto-Push Policy**:
   - Check auto-push status via `agentkit commit conventions` (`Auto-push: [ON]` or `[OFF]`).
   - If `Auto-push: [ON]`, `post-commit` automatically pushes (`[hook:post-commit] [PUSH] Auto-pushed to ...`). **Do not run manual `git push`**.
+    - If the current branch has no upstream configured (e.g. newly created worktree/local branch), auto-push is safely skipped without errors.
   - If `Auto-push: [OFF]`, do **not** push unless explicitly instructed by the user.
   - To bypass auto-push for a specific commit:
     ```bash

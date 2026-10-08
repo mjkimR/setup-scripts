@@ -72,6 +72,41 @@ def head_sha(cwd: Path | None = None) -> str:
     return result.stdout.strip()
 
 
+def current_branch(cwd: Path | None = None) -> str:
+    """Return the name of the current branch, or empty string if detached HEAD."""
+    result = subprocess.run(
+        ["git", "branch", "--show-current"],
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+    )
+    return result.stdout.strip()
+
+
+def has_upstream(cwd: Path | None = None) -> bool:
+    """Check whether the current branch has an upstream configured."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--verify", "--quiet", "@{upstream}"],
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+    )
+    return result.returncode == 0
+
+
+def upstream_branch(cwd: Path | None = None) -> str:
+    """Return the upstream branch name (e.g. 'origin/main'), or empty string if none."""
+    result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}"],
+        cwd=str(cwd) if cwd else None,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        return result.stdout.strip()
+    return ""
+
+
 def pending(cwd: Path | None = None) -> list[str]:
     output = run(["status", "--porcelain"], cwd=cwd)
     return [line for line in output.splitlines() if line.strip()]

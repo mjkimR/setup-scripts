@@ -462,6 +462,79 @@ def test_run_post_commit_auto_push_failure_shows_error_and_hint(hook_repo, monke
     assert "[hint] To push manually: git push origin main" in result.output
 
 
+def test_run_post_commit_auto_push_skipped_when_no_upstream(hook_repo, monkeypatch):
+    runner = CliRunner()
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True),
+        push=PushConfig(enabled=True, remote="origin", branch=""),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: initial commit")
+
+    pushed_args = []
+    real_run = subprocess.run
+
+    def mock_run(args, **kwargs):
+        if isinstance(args, list) and len(args) > 1 and args[0] == "git" and args[1] == "push":
+            pushed_args.append(list(args))
+            return subprocess.CompletedProcess(args, 0, stdout="", stderr="")
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    # 1. Compact/verbose output includes the skip message
+    result = runner.invoke(cli, ["hook", "run-post-commit", "--verbose"])
+    assert result.exit_code == 0
+    assert len(pushed_args) == 0
+    assert "[hook:post-commit] [SKIP] Auto-push skipped: no upstream branch configured" in result.output
+
+    # 2. Quiet mode suppresses the skip message
+    result_quiet = runner.invoke(cli, ["hook", "run-post-commit", "--quiet"])
+    assert result_quiet.exit_code == 0
+    assert len(pushed_args) == 0
+    assert "[hook:post-commit] [SKIP]" not in result_quiet.output
+
+
+def test_run_post_commit_auto_push_graceful_on_no_upstream_stderr(hook_repo, monkeypatch):
+    runner = CliRunner()
+    cfg = RepoConfig(
+        path=repo_config_path(),
+        whitelist=WhitelistConfig(enabled=True, allowed_emails=["test@example.com"]),
+        hooks=HooksConfig(policy="strict", installed=True),
+        push=PushConfig(enabled=True, remote="origin", branch="feature"),
+    )
+    save_repo_config(cfg)
+
+    (hook_repo / "clean.txt").write_text("content\n")
+    git("add", "clean.txt")
+    git("commit", "-m", "feat: initial commit")
+
+    real_run = subprocess.run
+
+    def mock_run(args, **kwargs):
+        if isinstance(args, list) and len(args) > 1 and args[0] == "git" and args[1] == "push":
+            return subprocess.CompletedProcess(
+                args,
+                128,
+                stdout="",
+                stderr="fatal: The current branch feature has no upstream branch.\nTo push the current branch: git push --set-upstream origin feature",
+            )
+        return real_run(args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", mock_run)
+
+    result = runner.invoke(cli, ["hook", "run-post-commit", "--verbose"])
+    assert result.exit_code == 0
+    # Should NOT show [ERROR] Auto-push failed
+    assert "[hook:post-commit] [ERROR]" not in result.output
+    assert "[hook:post-commit] [SKIP] Auto-push skipped: no upstream branch configured" in result.output
+
+
 def test_commit_conventions_shows_auto_push_status(hook_repo):
     runner = CliRunner()
     # 1. When push is off
