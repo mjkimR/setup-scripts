@@ -21,7 +21,6 @@ from pathlib import Path
 from .. import gitutil
 from ..agy import AgyClient, AgyRun, missing_rules
 from ..agy.diagnose import FailureTexts, diagnose_failure
-from ..commitsafe import checked_identity
 from ..errors import (
     Actor,
     Advisory,
@@ -269,10 +268,6 @@ def _preflight(task: HandoffTask, *, client: AgyClient, repo: Path | None) -> Pa
                     "Or ask the user for preferences: whitelist, timeline, language (ko/en), style.",
                 ],
             )
-        # The whitelist is a guardrail of its own, not a timeline feature: it
-        # must hold for the plain task too, or disabling the timeline would
-        # silently disable identity checking with it.
-        checked_identity(cwd=root)
         # Catches a hand-edited config: the CLI refuses to *set* run-all, but
         # the JSON file is just a file.
         ensure_supported_hooks_policy(repo_cfg.hooks.policy)

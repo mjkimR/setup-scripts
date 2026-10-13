@@ -185,7 +185,7 @@ def test_commit_cli_onboard_update_preserves_settings(repo: Path, monkeypatch) -
     assert res.exit_code == 0
     assert "Repository is already onboarded" in res.output
 
-    # Running onboard with --update preserves custom values while applying overrides and installing hooks
+    # Running onboard with --update preserves custom values while applying overrides
     res = runner.invoke(cli, ["commit", "onboard", "--update", "--language", "en"])
     assert res.exit_code == 0
     assert "[SUCCESS] Updated repository commit configuration" in res.output
@@ -200,9 +200,9 @@ def test_commit_cli_onboard_update_preserves_settings(repo: Path, monkeypatch) -
     assert loaded.timeline.start == "10:00"
     assert loaded.timeline.end == "19:00"
     assert loaded.verify.test == "pytest -q"
-    # Hooks installed
-    assert (repo / ".git" / "hooks" / "post-commit").exists()
-    assert (repo / ".git" / "hooks" / "pre-commit").exists()
+    # Onboarding manages configuration without installing Git hooks.
+    for stage in ("pre-commit", "commit-msg", "post-commit"):
+        assert not (repo / ".git" / "hooks" / stage).exists()
 
 
 def test_repo_config_migration_and_backfill(repo: Path) -> None:
@@ -470,19 +470,6 @@ def test_a_worktree_onboarded_before_the_move_still_loads(repo: Path) -> None:
     assert repo_config_path(cwd=repo).is_file()
 
 
-def test_worktrees_share_one_commit_timeline(repo: Path) -> None:
-    """State is keyed by the config path: one repository, one virtual day."""
-    from agentkit.commitsafe import state_path
-    from agentkit.commitsafe.config import Config
-
-    subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "base"], cwd=str(repo), check=True)
-    tree = _worktree(repo, "parallel")
-
-    main_state = state_path(Config(path=repo_config_path(cwd=repo)))
-    tree_state = state_path(Config(path=repo_config_path(cwd=tree)))
-    assert main_state == tree_state
-
-
 def test_commit_rules_reach_the_config_output(repo: Path, monkeypatch) -> None:
     """A rule nobody renders is a rule nobody follows."""
     monkeypatch.chdir(repo)
@@ -496,20 +483,6 @@ def test_commit_rules_reach_the_config_output(repo: Path, monkeypatch) -> None:
 
     assert result.exit_code == 0, result.output
     assert "Subject stays under 60 characters." in result.output
-
-
-def test_commit_rules_reach_the_handoff_prompt(repo: Path) -> None:
-    from agentkit.handoff.tasks import TASKS
-
-    cfg = RepoConfig(
-        path=repo_config_path(cwd=repo),
-        conventions=ConventionConfig(rules=["Never mention the ticket number."]),
-    )
-    save_repo_config(cfg, cwd=repo)
-
-    prompt = TASKS["commit"].prompt(repo)
-
-    assert "Never mention the ticket number." in prompt
 
 
 def test_several_set_pairs_all_land(repo: Path, monkeypatch) -> None:

@@ -16,17 +16,12 @@ run_installer() {
   HOME="$test_home" PATH="/usr/bin:/bin" bash "$INSTALLER" "$@" >"$test_root/install.out" 2>&1
 }
 
-# 1. Non-interactive default run: should only install default: true skills (git-commit, handoff)
+# 1. Non-interactive default run: should only install default: true skills (handoff)
 run_installer
 
 gemini_skills="$test_home/.gemini/config/skills"
 claude_skills="$test_home/.claude/skills"
 codex_skills="$test_home/.codex/skills"
-
-[ -L "$gemini_skills/git-commit" ] || {
-  echo "FAIL: git-commit was not symlinked by default" >&2
-  exit 1
-}
 
 [ -L "$claude_skills/handoff" ] || {
   echo "FAIL: handoff was not symlinked to Claude by default" >&2
@@ -86,18 +81,18 @@ run_installer --all
 }
 
 # 4. Backup behavior: if a real directory already exists, it is moved aside to .bak
-rm "$gemini_skills/git-commit"
-mkdir -p "$gemini_skills/git-commit"
-printf '%s\n' 'local custom skill' >"$gemini_skills/git-commit/SKILL.md"
+unlink "$gemini_skills/polish-doc" 2>/dev/null || rm -f "$gemini_skills/polish-doc"
+mkdir -p "$gemini_skills/polish-doc"
+printf '%s\n' 'local custom skill' >"$gemini_skills/polish-doc/SKILL.md"
 
-run_installer git-commit
+run_installer polish-doc
 
-[ -d "${gemini_skills}/git-commit.bak" ] || {
+[ -d "${gemini_skills}/polish-doc.bak" ] || {
   echo "FAIL: installer did not back up the existing real directory" >&2
   exit 1
 }
 
-[ -L "$gemini_skills/git-commit" ] || {
+[ -L "$gemini_skills/polish-doc" ] || {
   echo "FAIL: installer did not replace real directory with symlink" >&2
   exit 1
 }

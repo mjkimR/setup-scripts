@@ -8,10 +8,8 @@ import click
 
 from ..agy import AgyClient
 from ..agy.client import DEFAULT_EFFORT, DEFAULT_TIMEOUT
-from ..errors import ConfigError
-from ..handoff import TASKS, get_task, run_handoff
+from ..handoff import TASKS
 from ..handoff.polish import run_polish
-from ..handoff.runner import DEFAULT_MAX_UNITS
 from ..handoff.style import DEFAULT_LANGUAGE, DEFAULT_LEVEL, LEVELS, languages, load_all
 from ..handoff.work import (
     DEFAULT_TARGET,
@@ -21,7 +19,7 @@ from ..handoff.work import (
     pickup_prompt,
     run_work,
 )
-from ..repoconfig import POLISH_CONFIG_NAME, load_polish_config, load_repo_config
+from ..repoconfig import POLISH_CONFIG_NAME, load_polish_config
 
 
 @click.group()
@@ -66,103 +64,6 @@ def _agy_client_options(func):
         help="Reasoning effort to ask agy for: low, medium or high.",
     )(func)
     return func
-
-
-@handoff.command("commit")
-@click.option(
-    "--mode",
-    type=click.Choice(["low", "default"]),
-    default="default",
-    show_default=True,
-    help="Commit workflow: low skips verification and bounds context; default verifies before delegation.",
-)
-@click.option(
-    "--safe/--plain",
-    "safe",
-    default=None,
-    help="Explicitly enforce or disable timeline/whitelist safe mode. Defaults to repo config if omitted.",
-)
-@click.option(
-    "--max-units",
-    default=DEFAULT_MAX_UNITS,
-    envvar="AGENTKIT_MAX_UNITS",
-    show_default=True,
-    help="Loop guard for --safe; ignored otherwise.",
-)
-@click.option(
-    "--hint",
-    "hints",
-    multiple=True,
-    callback=_validate_lines,
-    help=(
-        "One intended commit per flag, in order: a one-line, subject-sized label "
-        "written from memory of the work. Advisory — agy follows the diff where they disagree."
-    ),
-)
-@click.option(
-    "--tests",
-    type=click.Choice(["passed", "failed", "not-run"]),
-    default=None,
-    help=(
-        "Attest the test-suite state of exactly the tree being handed off, "
-        "so agy neither runs nor speculates about tests. Omit if unknown."
-    ),
-)
-@click.option(
-    "--push/--no-push",
-    "push",
-    default=None,
-    help="Explicitly enable or disable auto-push after commit. Defaults to repo config if omitted.",
-)
-@_agy_client_options
-@click.pass_context
-def commit(
-    ctx: click.Context,
-    mode: str,
-    safe: bool | None,
-    push: bool | None,
-    effort: str,
-    timeout: str,
-    max_units: int,
-    hints: tuple[str, ...],
-    tests: str | None,
-    verbose: bool,
-) -> None:
-    """Delegate committing the working tree.
-
-    Exit codes: 0 committed (or nothing to commit), 1 no commit was created,
-    2 commits were made but changes remain.
-    """
-    repo_cfg = load_repo_config()
-    timeline_on = repo_cfg is not None and repo_cfg.timeline.enabled
-    is_safe = timeline_on if safe is None else safe
-
-    # An explicit --safe on a timeline-disabled repo would run the safe task
-    # with an empty timestamp env while its prompt claims the dates are set —
-    # every commit would silently land on the system clock.
-    if safe and repo_cfg is not None and not repo_cfg.timeline.enabled:
-        raise ConfigError(
-            "--safe was requested, but this repository's timeline is disabled, so no timestamps would be injected.",
-            fix="agentkit commit config --set timeline.enabled=true",
-            what_to_report=(
-                "Safe mode was requested but the repository timeline is disabled; commits would use the "
-                "system clock. The user must choose: enable the timeline, or rerun without --safe."
-            ),
-            details=["Enable it with the fix command, or drop --safe to use plain mode deliberately."],
-        )
-
-    task = get_task("commit-safe" if is_safe else "commit")
-    result = run_handoff(
-        task,
-        client=AgyClient(effort=effort, timeout=timeout),
-        max_units=max_units,
-        verbose=verbose,
-        hints=hints,
-        tests=tests,
-        push=push,
-        mode=mode,
-    )
-    ctx.exit(int(result.exit_code))
 
 
 # Eager, so `--list-levels` answers before the command needs a repository or

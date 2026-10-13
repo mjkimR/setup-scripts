@@ -63,28 +63,24 @@ setting in `SKILL.md` and Codex's policy in `agents/openai.yaml`. These research
 skills disable implicit invocation in both hosts; `meta.yaml`'s `default` only
 controls installation selection, not invocation.
 
-Commit workflows run directly in the active agent session using repository
-templates and `agentkit commit-safe`. Subagent delegation has been deprecated
-([ADR 0015](docs/decisions/0015-deprecate-commit-subagents.md)). When delegating
-to Antigravity is preferred, `agentkit handoff commit` remains available.
-
-[AgentKit](tools/agentkit/README.md) owns executable behavior: commit onboarding,
-verification, guards, handoff, and polish configuration. Skills describe workflows.
+Git commit gates and hooks are managed by `devkit-gates`.
+[AgentKit](tools/agentkit/README.md) owns repository conventions, verification commands,
+session handoff, and polish configuration. Skills describe workflows.
 [Notification setup](modules/agents/hooks/notify/README.md) covers macOS banners,
 click-to-focus, hook trust, backups, and troubleshooting.
 
 ## Personal developer CLI
 
 `devkit` prepares diff attachments and prompts for manual AI chats. It is installed
-separately from AgentKit:
+alongside AgentKit (`uv tool install --editable tools/agentkit`):
 
 ```sh
-uv tool install --editable tools/devkit
 devkit copy-diff
 devkit prompt review --last -l Korean
+# or: agentkit devkit copy-diff
 ```
 
-See [devkit](tools/devkit/README.md) for options and clipboard support.
+See [AgentKit developer utilities](tools/agentkit/README.md#developer-utilities-devkit) for options and clipboard support.
 
 ## Development
 

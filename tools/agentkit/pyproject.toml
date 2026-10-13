@@ -8,6 +8,7 @@ dependencies = ["click>=8.1"]
 
 [project.scripts]
 agentkit = "agentkit.cli:main"
+devkit = "agentkit.devkit.cli:main"
 
 [dependency-groups]
 dev = ["pytest>=8.0"]

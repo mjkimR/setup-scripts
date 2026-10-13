@@ -1,8 +1,7 @@
 """Fixtures shared by the agentkit tests.
 
 Everything is isolated: a throwaway git repository, a stub `agy`, and agy
-settings / commit-safe config / timestamp state redirected into tmp_path. No
-test may read or write the machine's real ones.
+settings redirected into tmp_path. No test may read or write the machine's real ones.
 """
 
 from __future__ import annotations
@@ -15,7 +14,6 @@ import pytest
 
 from agentkit.agy import permissions
 from agentkit.agy.client import AgyClient
-from agentkit.commitsafe import config as safe_config
 from tests.support.git import _git
 
 STUB = Path(__file__).parent / "stubs" / "agy_stub.py"
@@ -58,7 +56,6 @@ def granted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
                         "command(git add)",
                         "command(git ls-files)",
                         "command(git diff)",
-                        "command(agentkit commit-safe commit)",
                         "command(agentkit commit context)",
                     ]
                 }
@@ -92,38 +89,3 @@ def stub_agy(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     STUB.chmod(0o755)
     monkeypatch.setenv("AGY_STUB_MODE", "all")
     return Stub
-
-
-@pytest.fixture
-def safe_setup(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, repo: Path):
-    """commit-safe config and timestamp state, both inside tmp_path."""
-    config = tmp_path / "commit-safe.yaml"
-    config.write_text(
-        """
-allowed_emails:
-  - test@example.com
-
-time:
-  range:
-    start: "09:00"
-    end: "18:00"
-  timezone: "Asia/Seoul"
-  min_gap_seconds: 5
-""".lstrip(),
-        encoding="utf-8",
-    )
-    monkeypatch.setenv(safe_config.CONFIG_ENV, str(config))
-    monkeypatch.setenv("XDG_STATE_HOME", str(tmp_path / "state"))
-    # git_email() reads the identity of whatever directory the process is in.
-    monkeypatch.chdir(repo)
-
-    repo_cfg_path = repo / ".git" / "agentkit-commit.json"
-    if repo_cfg_path.is_file():
-        from agentkit.repoconfig import load_repo_config, save_repo_config
-
-        cfg = load_repo_config(cwd=repo)
-        if cfg:
-            cfg.timeline.enabled = True
-            save_repo_config(cfg, cwd=repo)
-
-    return config

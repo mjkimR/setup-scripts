@@ -17,10 +17,6 @@ uv tool install --editable tools/agentkit
 agentkit commit onboard|analyze|config        per-repo config, onboarding, history analysis
 agentkit commit context [--mode low|default|high]  conventions + staged diff; no mutations
 agentkit commit verify [--only test|lint]     run the repo's verify commands, echoing each first
-agentkit commit-safe commit -m … [--amend]    the checked, stamped `git commit` skills call
-agentkit commit-safe init|verify|stamp|env    identity whitelist + commit timestamps
-agentkit handoff commit [--safe/--plain]      legacy agy commit route for existing callers
-                        [--hint L]... [--tests S]   advisory commit-unit labels + test attestation
 agentkit handoff work --to agy|codex --doc F  have another agent CLI continue a handoff document
 agentkit handoff prompt --doc F               print the pickup prompt for an interactive session
 agentkit handoff polish [paths…]              delegate Markdown copyediting to agy
@@ -28,54 +24,10 @@ agentkit handoff tasks                        what can be handed off
 agentkit agy check|grant                      the allow-list headless agy needs
 agentkit git summary                          working tree overview
 agentkit scratch path|onboard|clean           per-repo scratch space for agent working files
+agentkit devkit copy-diff                     export staged diff to temp file & copy to clipboard
+agentkit devkit prompt commit|review          generate commit message or code review prompt
+devkit copy-diff|prompt                       standalone CLI alias (installed alongside agentkit)
 ```
-
-## Single-commit modes
-
-`/git-commit low` uses a bounded staged patch preview; `/git-commit` uses the full
-staged patch; `/git-commit high` permits additional targeted inspection. Every
-mode creates at most one commit. Message generation runs directly in the calling
-session using the repository template and conventions from `agentkit commit context`.
-
-Low uses only the supplied inventory and bounded preview for message generation.
-Even when omitted changes are unclear, it forbids further diff, file, or history
-reads and uses broader supported wording instead. It never upgrades modes automatically.
-
-Low always skips agent-run tests, lint, builds, and `agentkit commit verify`,
-regardless of configuration or prior attestations, and reports verification as
-skipped (low mode). Default/high retain the configured verification workflow.
-Commit guards and configured Git hooks still apply in every mode.
-
-After staging the intended scope, `agentkit commit context` prints the repository
-conventions, all staged paths, summary, and patch. Low limits only the patch to
-200 lines / 16,000 characters and explicitly marks omitted content. Default/high
-print the full patch. The command requires onboarding and a nonempty index, runs
-from the repository root even when invoked in a subdirectory, and never stages,
-verifies, commits, or launches an LLM. The skill owns those steps.
-
-## Commit message cleanup
-
-Managed Git hooks (`agentkit hook run-commit-msg`) and `agentkit commit-safe commit`
-remove `Co-Authored-By:` lines from supplied messages by default, including
-repeated paragraphs and `--amend` messages. Matching ignores case and leading spaces;
-other text and trailers are preserved. Repositories with no config, or older configs
-without this setting, also default to removal.
-
-```bash
-# Keep co-author lines for this repository (after onboarding).
-agentkit commit config --set conventions.strip_co_authored_by=false
-
-# Override the repository setting for one commit via git config.
-git -c agentkit.strip-co-authored-by=false commit -m '…'
-
-# Or when invoking commit-safe / hook CLI directly:
-agentkit commit-safe commit --no-strip-co-authored-by -m '…'
-agentkit hook run-commit-msg --no-strip-co-authored-by <msg-file>
-```
-
-Onboarding also accepts `--strip-co-authored-by` (default) or
-`--no-strip-co-authored-by`. Cleanup applies to the commit message before Git
-finalizes the commit; it does not rewrite existing history.
 
 ## Scratch space
 
@@ -117,8 +69,8 @@ They are a contract — skills tell the calling agent what each one means.
 | Code | Meaning |
 |---|---|
 | 0 | What was asked for happened |
-| 1 | Nothing happened: no commit was created, or the identity was rejected |
-| 2 | Unfinished: commits made with files left over, a loop guard tripped, or the config is unusable |
+| 1 | Nothing happened: no work was performed or task failed |
+| 2 | Unfinished: tasks made partial progress, a loop guard tripped, or the config is unusable |
 | 64 | The command line itself was wrong |
 
 ## Layout
@@ -133,14 +85,32 @@ src/agentkit/
   ui.py           tagged console output
   agy/            Antigravity CLI adapter: invocation, log parsing, permissions
   codex/          Codex CLI adapter: headless `codex exec` invocation
-  handoff/        commit: delegate-and-verify runner + task registry; work: continue a handoff document (spec/progress/result)
-  commitsafe/     config, identity whitelist, timestamp timeline, pre-commit guards
+  devkit/         personal developer utilities (diff export, review/commit prompts, clipboard)
+  handoff/        work: continue a handoff document (spec/progress/result); polish: copyediting delegation
   commands/       click bindings (domain modules stay click-free)
 ```
 
 Adding a handoff task means adding one entry to `handoff/tasks.py`: the skill to
 invoke, the prompt, the grants it needs, and whether the runner should drive it
-one unit at a time. The runner itself knows nothing about commits.
+one unit at a time.
+
+## Developer utilities (devkit)
+
+Personal developer utilities for sharing Git changes with an AI chat.
+Available via `agentkit devkit` or directly as `devkit`:
+
+```bash
+devkit copy-diff                         # staged diff file, copied as a macOS attachment
+devkit copy-diff feature --head          # tracked staged + unstaged changes, feature.txt
+devkit copy-diff --last --no-copy         # latest commit to a file; print its path
+devkit prompt commit -l Korean           # copy a commit-message prompt
+devkit prompt review -l Korean           # copy a staged review prompt
+devkit prompt review --last --stdout     # print a prompt without clipboard access
+devkit prompt review --head --exclude uv.lock --stdout
+```
+
+All commands read from the repository root. Untracked files are omitted; stage intended
+files to include them.
 
 ## Tests
 
@@ -148,36 +118,6 @@ one unit at a time. The runner itself knows nothing about commits.
 cd tools/agentkit && uv run pytest     # package tests
 tests/run-all.sh                       # repository-wide suites
 ```
-
-## Commit handoff to Antigravity
-
-The `agentkit handoff commit` CLI delegates the commit workflow to Antigravity
-(`agy`). Subagent delegation has been deprecated ([ADR 0015](../../docs/decisions/0015-deprecate-commit-subagents.md))
-in favor of running commits directly in the active session. This CLI route
-remains available when offloading commit execution to `agy` is desired. Do not run
-multiple commit workflows against the same checkout concurrently.
-
-`agentkit handoff commit --mode default` (the CLI default) runs enabled repository
-verification before staging/delegation. Failure stops before agy is started. An explicit
-`--tests` attestation skips duplicate verification. Disabled/unconfigured checks are
-reported as skipped, not passed. The headless receiver never runs verification itself.
-
-`--mode low` always skips runner verification and reports `skipped (low mode)`;
-it overrides supplied attestations with `not-run`. Both modes invoke `/git-commit MODE`
-and request `agentkit commit context --mode MODE` after staging. Low bounds the patch
-while retaining every path; default uses the full staged patch. `--effort` remains a
-separate model setting (medium by default). One commit is expected per handoff;
-unexpected commit counts are reported as incomplete, without pushing or retrying.
-
-Run `agentkit agy grant` to add the read-only context command permission when upgrading.
-The Python runner's omitted mode retains the legacy caller-managed attestation behavior;
-the CLI always passes an explicit workflow mode. Use `--no-push` to override repo push policy.
-
-Headless `unsandboxed` denials are separate from `command(...)` permissions.
-The default `agentkit agy grant` does not grant sandbox bypass. Such failures,
-and denials with no identified command, require evidence review instead of an
-automatic grant/retry. Conversation tool arguments are reported as unconfirmed
-request candidates, never as proof of which command was denied.
 
 ## Markdown polish
 
@@ -200,9 +140,9 @@ can choose per-file levels:
 Patterns use gitignore-style matching; the first match wins, so put specific rules
 first. A bare pattern matches basenames and `**` crosses directories.
 `agentkit agy grant` installs required command grants: diff-scoped polish needs
-`command(git diff)`; explicit whole-file runs do not. Legacy commit handoff also
-requires git add, git ls-files, and commit-safe commit grants before starting.
+`command(git diff)`; explicit whole-file runs do not.
 The runner checks Git/file state rather than relying on agy's exit status alone.
 
-For commit identity and `--safe` timestamp-window configuration, see
-[onboarding](../../modules/agents/skills/git-commit/references/onboarding.md).
+Git commit gates and hooks are handled by the separate `devkit-gates` CLI.
+`agentkit commit onboard` configures agentkit conventions and verification workflows
+without managing Git hooks.

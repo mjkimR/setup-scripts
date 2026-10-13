@@ -14,11 +14,10 @@ import click
 from . import __version__
 from .commands.agy import agy
 from .commands.commitcmd import commit_group
-from .commands.commitsafe import commit_safe
 from .commands.gitcmd import git_group
 from .commands.handoff import handoff
-from .commands.hookcmd import hook_group
 from .commands.scratch import scratch
+from .devkit.cli import cli as devkit_cli
 from .errors import Actor, Advisory, AgentkitError, ErrorCode, ExitCode, Retry
 
 
@@ -68,13 +67,11 @@ def cli() -> None:
 
 
 cli.add_command(commit_group)
-cli.add_command(commit_safe)
 cli.add_command(handoff)
 cli.add_command(agy)
 cli.add_command(git_group)
 cli.add_command(scratch)
-cli.add_command(hook_group)
-commit_group.add_command(hook_group, name="hook")
+cli.add_command(devkit_cli, name="devkit")
 
 
 def main() -> None:

@@ -1,6 +1,6 @@
 import subprocess
 
-from devkit import clipboard
+from agentkit.devkit import clipboard
 
 
 def test_macos_file_path_is_an_argument(monkeypatch, tmp_path):

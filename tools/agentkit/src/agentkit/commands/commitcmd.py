@@ -12,10 +12,8 @@ from .. import gitutil
 from ..repoconfig import (
     DEFAULT_END,
     DEFAULT_HOOKS_POLICY,
-    DEFAULT_HOOKS_VERBOSITY,
     DEFAULT_START,
     HOOKS_POLICIES,
-    HOOKS_VERBOSITIES,
     ConventionConfig,
     HooksConfig,
     PushConfig,
@@ -25,7 +23,6 @@ from ..repoconfig import (
     WhitelistConfig,
     analyze_repo_history,
     ensure_supported_hooks_policy,
-    ensure_supported_hooks_verbosity,
     load_repo_config,
     repo_config_path,
     save_repo_config,
@@ -102,8 +99,6 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
         # runner would refuse at handoff time anyway.
         if any(key == "hooks.policy" for key, _ in applied):
             ensure_supported_hooks_policy(cfg.hooks.policy)
-        if any(key == "hooks.verbosity" for key, _ in applied):
-            ensure_supported_hooks_verbosity(cfg.hooks.verbosity)
         save_repo_config(cfg)
         for key, value in applied:
             click.echo(f"[SUCCESS] Updated {key} = {value}")
@@ -129,7 +124,7 @@ def show_config(as_json: bool, set_pairs: tuple[str, ...]) -> None:
     click.echo(f"  Language:    {cfg.conventions.language}")
     click.echo(f"  Style:       {cfg.conventions.style}")
     click.echo(f"  Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
-    click.echo(f"  Hooks:       policy={cfg.hooks.policy}, verbosity={cfg.hooks.verbosity}")
+    click.echo(f"  Hooks:       policy={cfg.hooks.policy}")
     click.echo(
         f"  Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
         f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
@@ -293,7 +288,7 @@ def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
     click.echo(f"  • Language:    {cfg.conventions.language}")
     click.echo(f"  • Style:       {cfg.conventions.style}")
     click.echo(f"  • Strip co-authors: {'[ON]' if cfg.conventions.strip_co_authored_by else '[OFF]'}")
-    click.echo(f"  • Hooks:       policy={cfg.hooks.policy}, verbosity={cfg.hooks.verbosity}")
+    click.echo(f"  • Hooks:       policy={cfg.hooks.policy}")
     click.echo(
         f"  • Verify:      {'[ON]' if cfg.verify.enabled else '[OFF]'} "
         f"test: {cfg.verify.test or '(none)'} | lint: {cfg.verify.lint or '(none)'}"
@@ -314,7 +309,7 @@ def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
 @click.option(
     "--update",
     is_flag=True,
-    help="Update existing repository configuration: preserve current values, apply specified options, and install missing hooks.",
+    help="Update existing repository configuration: preserve current values, apply specified options.",
 )
 @click.option("--whitelist/--no-whitelist", default=None, help="Enable or disable identity whitelist check.")
 @click.option("--timeline/--no-timeline", default=None, help="Enable or disable commit timestamp resolution.")
@@ -335,12 +330,6 @@ def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
     type=click.Choice(HOOKS_POLICIES),
     default=None,
     help=(f"Git-hook policy. [default: {DEFAULT_HOOKS_POLICY}] run-all is reserved and fails as not implemented."),
-)
-@click.option(
-    "--hooks-verbosity",
-    type=click.Choice(list(HOOKS_VERBOSITIES)),
-    default=None,
-    help=f"Git-hook output verbosity (quiet, compact, verbose). [default: {DEFAULT_HOOKS_VERBOSITY}]",
 )
 @click.option(
     "--test-cmd",
@@ -377,15 +366,7 @@ def _print_onboard_summary(cfg: RepoConfig, title: str) -> None:
     default=None,
     help="Branch to push to. Defaults to current branch.",
 )
-@click.option(
-    "--install-hooks/--no-install-hooks",
-    default=True,
-    show_default=True,
-    help="Install git hooks (pre-commit, commit-msg, post-commit) into .git/hooks.",
-)
-@click.pass_context
 def onboard(
-    ctx: click.Context,
     force: bool,
     update: bool,
     whitelist: bool | None,
@@ -397,22 +378,18 @@ def onboard(
     start: str | None,
     end: str | None,
     hooks_policy: str | None,
-    hooks_verbosity: str | None,
     test_cmd: str | None,
     lint_cmd: str | None,
     verify_enabled: bool | None,
     push_enabled: bool | None,
     push_remote: str | None,
     push_branch: str | None,
-    install_hooks: bool = True,
 ) -> None:
     """Initialize or update repository commit configuration with auto-detected defaults."""
     existing = load_repo_config()
     if existing and not force and not update:
         click.echo(f"[INFO] Repository is already onboarded: {existing.path}")
-        click.echo(
-            "[INFO] Re-run with --update to preserve settings and install missing hooks, or --force to overwrite completely."
-        )
+        click.echo("[INFO] Re-run with --update to preserve settings, or --force to overwrite completely.")
         return
 
     if existing and update and not force:
@@ -440,10 +417,6 @@ def onboard(
             ensure_supported_hooks_policy(hooks_policy)
             existing.hooks.policy = hooks_policy
 
-        if hooks_verbosity is not None:
-            ensure_supported_hooks_verbosity(hooks_verbosity)
-            existing.hooks.verbosity = hooks_verbosity
-
         if verify_enabled is not None:
             existing.verify.enabled = verify_enabled
         if test_cmd is not None:
@@ -462,10 +435,6 @@ def onboard(
         save_repo_config(cfg)
         _print_onboard_summary(cfg, f"[SUCCESS] Updated repository commit configuration at {cfg.path}")
 
-        if install_hooks:
-            from .hookcmd import install as install_hooks_cmd
-
-            ctx.invoke(install_hooks_cmd)
         return
 
     analysis = analyze_repo_history()
@@ -482,9 +451,6 @@ def onboard(
     final_hooks_policy = hooks_policy or DEFAULT_HOOKS_POLICY
     # The Choice already filters unknown values; this closes the reserved one.
     ensure_supported_hooks_policy(final_hooks_policy)
-
-    final_hooks_verbosity = hooks_verbosity or DEFAULT_HOOKS_VERBOSITY
-    ensure_supported_hooks_verbosity(final_hooks_verbosity)
 
     target_path = repo_config_path()
     cfg = RepoConfig(
@@ -504,7 +470,7 @@ def onboard(
             template=final_template,
             strip_co_authored_by=strip_co_authored_by,
         ),
-        hooks=HooksConfig(policy=final_hooks_policy, verbosity=final_hooks_verbosity),
+        hooks=HooksConfig(policy=final_hooks_policy),
         verify=VerifyConfig(
             enabled=True if verify_enabled is None else verify_enabled,
             test=test_cmd or "",
@@ -519,11 +485,6 @@ def onboard(
 
     save_repo_config(cfg)
     _print_onboard_summary(cfg, f"[SUCCESS] Initialized repository commit configuration at {target_path}")
-
-    if install_hooks:
-        from .hookcmd import install as install_hooks_cmd
-
-        ctx.invoke(install_hooks_cmd)
 
 
 def _set_nested(cfg: RepoConfig, key: str, value: str) -> None:

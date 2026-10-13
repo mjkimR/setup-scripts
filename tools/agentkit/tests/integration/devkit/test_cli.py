@@ -5,8 +5,8 @@ import click
 import pytest
 from click.testing import CliRunner
 
-from devkit import clipboard
-from devkit.cli import cli, write_export
+from agentkit.devkit import clipboard
+from agentkit.devkit.cli import cli, write_export
 
 
 def git(*args):
