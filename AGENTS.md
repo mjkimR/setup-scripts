@@ -61,7 +61,6 @@ passed.
 
 - Preserve unrelated working-tree changes.
 - Do not commit credentials, environments, caches, or generated artifacts.
-- Do not commit or push unless explicitly asked.
 
 ## Documentation language
 
