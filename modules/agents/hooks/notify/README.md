@@ -20,9 +20,16 @@ Claude Code · 49s · 14:23
 - Each chat keeps one banner. Submitting a prompt retracts it. Codex uses its
   top-level `notify` command for completion and `UserPromptSubmit` for retraction.
 - Claude forwards permission prompts and MCP elicitation, excluding `idle_prompt`.
-  Codex forwards `PermissionRequest` asynchronously for shell, file, and MCP approvals.
-- Claude suppresses completion banners for turns under 30 seconds; override with
-  `AGENT_NOTIFY_MIN_SECONDS`. Codex reports completion regardless of duration.
+  Codex forwards `PermissionRequest` asynchronously for shell, file, and MCP approvals
+  only in confirmed top-level CLI sessions.
+- Both agents suppress completion banners for turns under 30 seconds; override
+  with `AGENT_NOTIFY_MIN_SECONDS`. Each user prompt permits one completion banner;
+  completions without a matching start are ignored.
+- Codex session metadata must identify `source: "cli"`. Subagents (including
+  internal reviewers), app/editor sessions, and unknown sources stay quiet.
+  The originator name alone does not distinguish CLI sessions from internal agents.
+  `AGENT_NOTIFY_CODEX_SURFACE=cli|desktop|subagent` overrides detection for debugging.
+  App notifications remain managed by the app itself.
 
 ## Installation and recovery
 

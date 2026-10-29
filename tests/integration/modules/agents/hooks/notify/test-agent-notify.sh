@@ -25,7 +25,7 @@ mkdir -p "$test_home" "$state_dir" "$log_dir" "$project" "$(dirname "$desktop_tr
 : >"$calls"
 printf '%s\n' '{"type":"session_meta","payload":{"originator":"Codex Desktop"}}' \
   >"$desktop_transcript"
-printf '%s\n' '{"type":"session_meta","payload":{"originator":"codex-tui"}}' \
+printf '%s\n' '{"type":"session_meta","payload":{"originator":"codex-tui","source":"cli"}}' \
   >"$cli_transcript"
 printf '%s\n' '{"type":"session_meta","payload":{"originator":"Codex Desktop"}}' \
   >"$desktop_subagent_transcript"
@@ -79,11 +79,15 @@ cli_prompt=$(jq -cn --arg cwd "$project" --arg transcript "$cli_transcript" \
 cli_completion=$(jq -cn --arg cwd "$project" \
   '{type:"agent-turn-complete", "thread-id":"01a0216f-41e9-7101-939d-8ede834f55a3", cwd:$cwd}')
 
-run_notify codex "$completion_one"
-run_notify codex "$completion_two"
-run_notify codex "$completion_legacy"
-printf '%s' "$prompt" | run_notify codex start
-printf '%s' "$permission" | run_notify codex input
+# Explicit CLI override exercises grouping independently of metadata detection.
+for completion in "$completion_one" "$completion_two" "$completion_legacy"; do
+  printf '%s' "$completion" | AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex start
+  AGENT_NOTIFY_CODEX_SURFACE=cli AGENT_NOTIFY_MIN_SECONDS=0 run_notify codex "$completion"
+done
+printf '%s' "$prompt" | AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex start
+printf '%s' "$permission" | AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex input
+# Consume the short turn so no state is left behind.
+AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex "$completion_one"
 calls_before_future=$(wc -l <"$calls")
 run_notify codex "$future_event"
 calls_after_future=$(wc -l <"$calls")
@@ -94,7 +98,7 @@ printf '%s' "$desktop_permission" | run_notify codex input
 run_notify codex "$desktop_subagent_completion"
 calls_after_desktop=$(wc -l <"$calls")
 printf '%s' "$cli_prompt" | run_notify codex start
-run_notify codex "$cli_completion"
+AGENT_NOTIFY_MIN_SECONDS=0 run_notify codex "$cli_completion"
 printf '%s' "$special_session" | run_notify claude start
 state_file_count=$(find "$state_dir" -maxdepth 1 -type f -name 'agent-notify-*' | wc -l | tr -d ' ')
 [ "$state_file_count" -eq 1 ] || {
@@ -170,7 +174,7 @@ if find "$state_dir" -maxdepth 1 -type f -name 'agent-notify-*' | grep -q .; the
   exit 1
 fi
 
-printf '%s' "$prompt" | HOME="$test_home" TMPDIR="$state_dir" \
+printf '%s' "$prompt" | AGENT_NOTIFY_CODEX_SURFACE=cli HOME="$test_home" TMPDIR="$state_dir" \
   AGENT_NOTIFY_STATE_DIR="$state_dir" AGENT_NOTIFY_LOG_DIR="$log_dir" \
   AGENT_NOTIFY_NOTIFIER="$REJECT_NOTIFIER" bash "$runtime_notify" codex start
 grep -Fq -- 'remove rc=99 tool=codex project=project-one session=thread-123 group=agent-codex-thread-123' \
@@ -179,4 +183,45 @@ grep -Fq -- 'remove rc=99 tool=codex project=project-one session=thread-123 grou
   exit 1
 }
 
-echo "PASS: Codex notification groups follow the chat session"
+
+# A CLI originator is also used by app sessions and internal agents. Only
+# source=cli is allowed, and old cached originator-only classifications expire.
+for source in '{"subagent":{"other":"guardian"}}' '{"subagent":{"thread_spawn":{"depth":1}}}' '"vscode"' 'null'; do
+  jq -cn --argjson source "$source" \
+    '{type:"session_meta",payload:{originator:"codex-tui",source:$source}}' >"$cli_transcript"
+  find "$state_dir" -name 'agent-surface-*' -delete
+  old_key=$(printf '%s' 'codex:01a0216f-41e9-7101-939d-8ede834f55a3' | shasum -a 256 | awk '{print $1}')
+  printf '%s\n' cli >"$state_dir/agent-surface-$old_key"
+  before=$(wc -l <"$calls")
+  printf '%s' "$cli_prompt" | run_notify codex start
+  printf '%s' "$cli_prompt" | run_notify codex input
+  AGENT_NOTIFY_MIN_SECONDS=0 run_notify codex "$cli_completion"
+  [ "$(wc -l <"$calls")" -eq "$before" ] || {
+    echo "FAIL: non-CLI source posted a notification: $source" >&2
+    exit 1
+  }
+done
+
+# CLI short turns, missing starts, and repeated completion events stay quiet.
+AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex "$completion_one"
+printf '%s' "$prompt" | AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex start
+before=$(wc -l <"$calls")
+AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex "$completion_one"
+AGENT_NOTIFY_CODEX_SURFACE=cli AGENT_NOTIFY_MIN_SECONDS=0 run_notify codex "$completion_one"
+[ "$(wc -l <"$calls")" -eq "$before" ] || {
+  echo "FAIL: short or repeated completion posted a notification" >&2
+  exit 1
+}
+# A long turn delivers once, with elapsed time, without sleeping in the test.
+printf '%s' "$prompt" | AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex start
+stamp=$(find "$state_dir" -name 'agent-notify-*' -type f -print -quit)
+printf '%s\n' "$(( $(date +%s) - 40 ))" >"$stamp"
+before=$(wc -l <"$calls")
+AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex "$completion_one"
+AGENT_NOTIFY_CODEX_SURFACE=cli run_notify codex "$completion_one"
+[ "$(wc -l <"$calls")" -eq "$((before + 1))" ] || {
+  echo "FAIL: long CLI turn did not deliver exactly once" >&2
+  exit 1
+}
+
+echo "PASS: Codex notifications filter execution source, duration and repeated completions"
