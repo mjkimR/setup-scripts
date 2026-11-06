@@ -10,7 +10,7 @@ arrow keys to navigate, Space to select, and Enter to confirm.
 ./setup.sh             # interactive category menu
 ./setup.sh --terminal  # all required terminal tools; no configuration prompts
 ./setup.sh --env       # environment configuration and optional addons
-./setup.sh --agents    # skills and notification hooks
+./setup.sh --agents    # global instructions, skills, and notification hooks
 ./setup.sh --all       # environment and agents
 ```
 
@@ -25,6 +25,13 @@ Customize `config/vscode/settings.json`, `config/vscode/keybindings.json`, and
 and `#` comments are ignored. Existing editor configuration is backed up.
 
 ## Agent setup
+
+The **Install Gemini global instructions** option installs a short English preset
+at `~/.gemini/GEMINI.md` for Gemini CLI and Antigravity. It covers grounded
+quantitative claims, explicit assumptions, proportionate designs, and `rg` searches.
+An existing file is skipped with an info message. See the
+[instruction installer guide](modules/agents/instructions/README.md) for skip behavior,
+manual installation, and authoring references.
 
 The **Sync AI Agent skills** option installs skills and their required CLI tools.
 Each skill's `meta.yaml` declares supported agents and default selection;
