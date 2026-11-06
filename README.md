@@ -10,7 +10,7 @@ arrow keys to navigate, Space to select, and Enter to confirm.
 ./setup.sh             # interactive category menu
 ./setup.sh --terminal  # all required terminal tools; no configuration prompts
 ./setup.sh --env       # environment configuration and optional addons
-./setup.sh --agents    # global instructions, skills, and notification hooks
+./setup.sh --agents    # instructions, permissions, skills, and notification hooks
 ./setup.sh --all       # environment and agents
 ```
 
@@ -32,6 +32,12 @@ quantitative claims, explicit assumptions, proportionate designs, and `rg` searc
 An existing file is skipped with an info message. See the
 [instruction installer guide](modules/agents/instructions/README.md) for skip behavior,
 manual installation, and authoring references.
+
+The **Configure Codex permissions** option adds workspace `.git` and global uv
+cache writes when a Codex configuration already exists. It preserves other
+settings through an inherited permission profile. See the
+[permissions guide](modules/agents/permissions/README.md) for prerequisites,
+backups, and legacy sandbox compatibility.
 
 The **Sync AI Agent skills** option installs skills and their required CLI tools.
 Each skill's `meta.yaml` declares supported agents and default selection;

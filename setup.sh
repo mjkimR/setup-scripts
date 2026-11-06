@@ -21,7 +21,7 @@ show_help() {
   echo "Options:"
   echo "  --env, env        Configure developer environment (Git, NVM, UV, Zsh, VS Code)"
   echo "  --terminal       Install all registered terminal tools without configuration prompts"
-  echo "  --agents, agents  Configure AI agents (Instructions, Skills, Notification hooks)"
+  echo "  --agents, agents  Configure AI agents (Instructions, Permissions, Skills, Notification hooks)"
   echo "  --all, all        Configure both developer environment and AI agents"
   echo "  -h, --help        Show this help message"
 }
@@ -119,18 +119,21 @@ scripts_env=(
 # Category 2: AI Agent Ecosystem
 options_agent=(
   "Install Gemini global instructions (Gemini CLI & Antigravity)"
+  "Configure Codex permissions (workspace .git & global uv cache)"
   "Sync AI Agent skills & agentkit CLI (Antigravity, Claude Code, Codex)"
   "Install agent notification hooks (Claude Code & Codex, macOS only)"
 )
 
 defaults_agent=(
   "true"  # Gemini global instructions
+  "true"  # Codex permissions, only when config.toml exists
   "true"  # Agent skills
   "false" # Agent notification hooks
 )
 
 scripts_agent=(
   "$SCRIPT_DIR/modules/agents/instructions/install.sh"
+  "$SCRIPT_DIR/modules/agents/permissions/install.sh"
   "$SCRIPT_DIR/modules/agents/skills/install.sh"
   "$SCRIPT_DIR/modules/agents/hooks/install.sh"
 )
@@ -138,7 +141,7 @@ scripts_agent=(
 if [ -z "$MODE" ]; then
   categories=(
     "🛠️  Development Environment (Git, Node/NVM, UV, Zsh, VS Code)"
-    "🤖 AI Agent Ecosystem (Instructions, Skills & agentkit CLI, Hooks)"
+    "🤖 AI Agent Ecosystem (Instructions, Permissions, Skills & agentkit CLI, Hooks)"
     "🚀 Full Setup (Environment + AI Agents)"
     "❌ Exit"
   )
