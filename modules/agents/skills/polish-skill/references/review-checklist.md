@@ -1,8 +1,8 @@
 # Review Checklist
 
 Each item names a defect and its fix. Apply the cut test to every line: would
-the agent get this wrong without it? If no, cut it. If unsure, keep it, list it
-in the report under items left as-is, and run the behavior check.
+the agent get this wrong without it? If no, cut it. If unsure, keep it and list it
+in the report under items left as-is.
 
 ## Trigger
 
@@ -56,6 +56,11 @@ in the report under items left as-is, and run the behavior check.
 - Replace time-relative words (`recently`, `currently`, "the new API") with a
   version or date, or drop them.
 - Name exact identifiers: commands with flags, paths, tool names.
+- Keep argument placeholders (`$ARGUMENTS`, `$0`, `$1`, ...) out of `SKILL.md`
+  except where the skill means to receive arguments. Hosts substitute them at
+  load time, so a shell or regex `$1` breaks whenever the skill is invoked with
+  arguments. Rewrite the command without the token (`rg -o` instead of
+  `rg -r '$1'`), or move it to a reference or script.
 
 ## Form
 

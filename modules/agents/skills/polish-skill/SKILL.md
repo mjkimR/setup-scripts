@@ -9,10 +9,7 @@ disable-model-invocation: true
 
 # Polish Skill
 
-A first-draft skill is written in one pass by the session that designed it,
-before anyone has watched an agent run it. It carries that session's residue:
-background the agent already knows, design history, emphasis, and content every
-run loads but few runs need. Remove the residue and keep the behavior.
+Remove what the agent running the skill does not need, and keep its behavior.
 
 ## Input
 
@@ -29,7 +26,7 @@ each separately.
 - Treat a behavior change as a redesign: report it as a proposal and leave it
   unapplied.
 - Modify files only inside the skill directory; scratch copies (snapshot,
-  inventory) go in a scratch location.
+  inventory) go in `<scratch>` (see Procedure).
 - When the frontmatter `description` changes, keep any description in
   `meta.yaml` or `agents/openai.yaml` consistent with it.
 - If the skill needs no change, report it as clean instead of inventing edits.
@@ -48,11 +45,12 @@ use a temporary directory outside the repository from `mktemp -d`.
    - Copy the skill directory to `<scratch>/<skill-name>/snapshot/`.
    - Record sizes with
      `find <skill-dir> -type f -name '*.md' -exec wc -c -l -w {} +`.
+   - If the skill's job does not fit in one sentence, stop and report
+     `Outcome: needs redesign`, the sizes, and the competing jobs.
    - Write `<scratch>/<skill-name>/inventory.md`: one line per directive,
      boundary, completion criterion, output contract, and needed example, with
      its file and section.
-   - If the skill's job does not fit in one sentence, stop and report
-     `Outcome: needs redesign`, the sizes, and the competing jobs.
+   - Done when `snapshot/` and `inventory.md` exist and the sizes are recorded.
 2. Critique in fresh context. If the host can spawn a subagent, delegate the
    critique to a fresh one every run. Pass the absolute paths of the target
    skill, [roles/critic.md](roles/critic.md), and
@@ -61,7 +59,8 @@ use a temporary directory outside the repository from `mktemp -d`.
    conclusions. Without subagents, critique the skill yourself as
    the agent that will run it, using the checklist and the findings format in
    `roles/critic.md`. Triage each finding: apply it in steps 3-5, reject it with
-   a one-line reason, or report it as a proposed behavior change.
+   a one-line reason, or report it as a proposed behavior change. Done when
+   every finding is marked apply, rejected with a reason, or proposed.
 3. Trigger pass. Check the frontmatter against the Trigger section of
    [review-checklist.md](references/review-checklist.md) and fix each item it
    fails. Done when every Trigger item holds.
@@ -72,21 +71,28 @@ use a temporary directory outside the repository from `mktemp -d`.
    repository's, otherwise about 500 lines or 12 KiB), or `SKILL.md` mixes
    content every run needs with content only some runs need, read
    [router-split.md](references/router-split.md) and restructure by it. Done
-   when every file is within budget or its overrun has a reason for the report.
+   when every file is within budget or its overrun has a reason for the report
+   (for example, one procedure always read whole, or a quoted external
+   protocol).
 6. Verify, in this order.
-   - If the first critique had `must` findings, run one re-critique on the
-     edited skill and triage it the same way. Do not run a third round.
+   - If the first critique had `must` findings, run one re-critique as in
+     step 2 on the edited skill and triage it the same way. Do not run a third
+     round.
    - Map every line of `<scratch>/<skill-name>/inventory.md` to its new
      location; restore any item that has none.
    - List relative links with
-     `rg -on --no-heading '\]\(([^)#:]+\.md)' -r '$1' <skill-dir>` and confirm
-     each target exists relative to the linking file. Every reference is linked
-     from `SKILL.md` with a read condition.
+     `rg -on --no-heading '\]\([^)#:]+' <skill-dir>`, strip the two leading
+     characters from each match, and confirm each target exists relative to
+     the linking file. Every reference is linked from `SKILL.md` with a read
+     condition.
    - The frontmatter limits in the Trigger section hold.
-   - If the repository has checks for skills or Markdown, run them and fix what
-     they report until they pass.
-7. Behavior check. When the description or procedure changed materially, the
-   skill is high-stakes (destructive, publishing, or credential-handling), a
+   - If the repository has checks for skills or Markdown, run them in the mode
+     that does not modify files (for example `./check.sh --check`). Fix
+     failures in files inside the skill directory; report other failures,
+     including ones that existed before, without fixing them.
+7. Behavior check. When the frontmatter `description` changed, a procedure
+   step was added, removed, reordered, or moved to a reference, the skill is
+   high-stakes (destructive, publishing, or credential-handling), a
    line was kept as unsure under the cut test, or the user asks, read
    [behavior-check.md](references/behavior-check.md) and run it against
    `<scratch>/<skill-name>/snapshot/` and the inventory.
