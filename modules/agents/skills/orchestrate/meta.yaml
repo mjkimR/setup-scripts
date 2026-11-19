@@ -1,0 +1,8 @@
+name: orchestrate
+description: Run the session as an orchestrator that delegates hands-on work to subagents
+default: false
+
+targets:
+  - antigravity
+  - claude
+  - codex
