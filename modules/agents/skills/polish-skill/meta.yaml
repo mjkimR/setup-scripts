@@ -1,0 +1,7 @@
+name: polish-skill
+description: Reviews a drafted agent skill and polishes its trigger description, wording, and router structure without changing its behavior
+default: false
+
+targets:
+  - claude
+  - codex

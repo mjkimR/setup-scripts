@@ -55,6 +55,7 @@ modules/agents/skills/install.sh git-commit # one skill
 | `handoff` | Claude Code | Write a portable session handoff document. |
 | `orchestrate` | Antigravity, Claude Code, Codex | Act as an orchestrator that delegates hands-on work to subagents. |
 | `polish-doc` | Antigravity | Korean Markdown copyediting. |
+| `polish-skill` | Claude Code, Codex | Review a drafted skill and polish its trigger, wording, and router structure. |
 | `research-req` | Claude Code, Codex | Prepare separate, copy-ready Deep Research prompts by topic. |
 | `research-review` | Claude Code, Codex | Review result files and derive conclusions for the current task. |
 
