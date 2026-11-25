@@ -36,14 +36,16 @@ instead of inventing decisions.
       the user's priorities decide, or it is a close call.
 4. **Challenge.** Run the challenger for every decision that meets at least
    one trigger, and record which trigger labels each decision meets:
-   - `비가역`: costly or hard to reverse, such as a data schema, public
+   - `irreversible`: costly or hard to reverse, such as a data schema, public
      interface, architecture recorded in an ADR, migration, purchase, or
      external commitment.
-   - `권장 단독`: classified recommend-only and affects behavior, interfaces,
-     or data beyond the current change, even if reversible. The user will not
-     see the alternatives, so nobody else can catch a wrong "this is obvious".
-   - `미확인 전제`: the recommendation rests on a premise marked in step 2.
-   - `사용자 요청`: the user asks for verification.
+   - `hidden alternatives`: classified recommend-only and affects behavior,
+     interfaces, or data beyond the current change, even if reversible. The
+     user will not see the alternatives, so nobody else can catch a wrong
+     "this is obvious".
+   - `unverified premise`: the recommendation rests on a premise marked in
+     step 2.
+   - `user request`: the user asks for verification.
 
    Send all triggered decisions to one fresh subagent. Pass the absolute path
    of [roles/challenger.md](roles/challenger.md) as its contract, the working
@@ -56,8 +58,9 @@ instead of inventing decisions.
    1. Premises. If its Premises contradict one of yours, re-check that premise
       by a file read or command. If yours is wrong, correct it, redo your pick
       and step 3 with the corrected premise, apply items 2-4 to the result, and
-      count it as a premise correction. If it verified a premise you marked unverified,
-      confirm it the same way and drop that `미확인 전제` line.
+      count it as a premise correction. If it verified a premise you marked
+      unverified, confirm it the same way and drop that unverified-premise
+      line.
    2. If its disagreement rests on a factual error of its own that you confirm
       by a file read or command, keep your result, count it as a rejection,
       and skip item 3.
@@ -68,15 +71,17 @@ instead of inventing decisions.
       recommendation, and count it as incorporated. Otherwise keep your
       classification.
    4. If the decision ends up a compare, use its Strongest risk and its case
-      for the best alternative in the 단점 entries and the flip condition.
+      for the best alternative in the cons entries and the flip condition.
 6. **Present** in the format below, then stop. Do not act on the
    recommendations until the user responds, unless the invocation says to
    proceed.
 
 ## Output
 
-Write in the user's language, translating the Korean labels in the templates
-and in step 4. Order decisions by dependency, then by impact.
+Write in the language of the conversation. The labels in the templates, the
+trigger labels in step 4, and the verification line are English examples;
+translate every one of them into that language. Order decisions by
+dependency, then by impact.
 Add the optional lines when they apply: the dependency line right under the
 question, the unverified-premise line last.
 
@@ -84,9 +89,9 @@ Recommend-only:
 
 ```
 **1. <question>**
-(<n>번이 <option>일 때만 해당)
-권장: <option>. <1-2 lines why.> (<rejected alternative>: <one-line reason>)
-미확인 전제: <premise>
+(applies only if #<n> is <option>)
+Recommendation: <option>. <1-2 lines why.> (<rejected alternative>: <one-line reason>)
+Unverified premise: <premise>
 ```
 
 Include the rejected-alternative parenthetical only when that alternative is a
@@ -96,11 +101,11 @@ Compare:
 
 ```
 **2. <question>**
-(<n>번이 <option>일 때만 해당)
-- <option A>: 장점 … / 단점 …
-- <option B>: 장점 … / 단점 …
-권장: <option>. <why, given the trade-off.> <what would flip it to another option.>
-미확인 전제: <premise>
+(applies only if #<n> is <option>)
+- <option A>: pros … / cons …
+- <option B>: pros … / cons …
+Recommendation: <option>. <why, given the trade-off.> <what would flip it to another option.>
+Unverified premise: <premise>
 ```
 
 Use a table instead of bullets when three or more options share the same
@@ -108,8 +113,8 @@ dimensions. Keep pros and cons to what discriminates between the options.
 
 Close with one verification line, using the trigger labels from step 4:
 
-- `검증: challenger 실행 (<decision numbers>; 트리거: <labels>) → <result>`,
-  where `<result>` is `일치`, or whichever of `<n>건 전제 정정`,
-  `<n>건 비교로 전환`, `<n>건 반론 반영`, and `<n>건 challenger 사실 오류 기각`
-  occurred, joined by commas.
-- `검증: 생략 (트리거 해당 없음)`
+- `Verification: challenger ran (<decision numbers>; triggers: <labels>) → <result>`,
+  where `<result>` is `agreed`, or whichever of `<n> premise corrected`,
+  `<n> switched to compare`, `<n> rebuttal incorporated`, and
+  `<n> challenger factual error rejected` occurred, joined by commas.
+- `Verification: skipped (no trigger met)`
