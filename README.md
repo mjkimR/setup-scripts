@@ -41,7 +41,7 @@ backups, and legacy sandbox compatibility.
 
 The **Sync AI Agent skills** option installs skills and their required CLI tools.
 Each skill's `meta.yaml` declares supported agents and default selection;
-`git-commit` and `handoff` are selected by default.
+`git-commit`, `handoff`, and `decision-brief` are selected by default.
 
 ```bash
 modules/agents/skills/install.sh            # interactive menu, or defaults without a TTY
@@ -51,6 +51,7 @@ modules/agents/skills/install.sh git-commit # one skill
 
 | Skill | Agents | Purpose |
 | --- | --- | --- |
+| `decision-brief` | Claude Code, Codex | Recommend on pending decisions; compare options only for real trade-offs. |
 | `git-commit` | Antigravity, Claude Code, Codex | One commit with low/default/high modes and repository guards. |
 | `handoff` | Claude Code | Write a portable session handoff document. |
 | `orchestrate` | Antigravity, Claude Code, Codex | Act as an orchestrator that delegates hands-on work to subagents. |
@@ -75,7 +76,7 @@ and reviews. No clipboard or Google account connection is required.
 
 The installer links entire skill directories, including Claude's invocation
 setting in `SKILL.md` and Codex's policy in `agents/openai.yaml`. The research
-skills and `orchestrate` disable implicit invocation in both hosts; `meta.yaml`'s `default` only
+skills, `decision-brief`, and `orchestrate` disable implicit invocation in both hosts; `meta.yaml`'s `default` only
 controls installation selection, not invocation.
 
 Git commit gates and hooks are managed by `devkit-gates`.
