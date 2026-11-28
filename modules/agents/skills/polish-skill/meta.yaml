@@ -3,5 +3,6 @@ description: Reviews a drafted agent skill and polishes its trigger description,
 default: false
 
 targets:
+  - antigravity
   - claude
   - codex
