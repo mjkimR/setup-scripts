@@ -1,0 +1,7 @@
+name: decision-brief
+description: Lays out pending decisions with a recommendation for each, comparing options only where the choice is a real trade-off
+default: true
+
+targets:
+  - claude
+  - codex

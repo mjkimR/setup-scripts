@@ -10,6 +10,7 @@ python3 - <<'PY'
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import tomllib
 import unittest
@@ -29,6 +30,9 @@ class PermissionInstallTests(unittest.TestCase):
         uv = self.bin / "uv"
         uv.write_text('#!/bin/sh\n[ "$PWD" = "$HOME" ] || exit 1\n[ "$*" = "cache dir" ] || exit 1\nprintf "%s\\n" "$TEST_CACHE"\n')
         uv.chmod(0o755)
+        # The controlled PATH falls back to /usr/bin, whose python3 may lack
+        # tomllib (macOS ships 3.9); expose this 3.11+ interpreter instead.
+        (self.bin / "python3").symlink_to(sys.executable)
         self.env = {"HOME": str(self.home), "PATH": f"{self.bin}:/usr/bin:/bin",
                     "TEST_CACHE": str(self.cache)}
 
@@ -48,6 +52,16 @@ class PermissionInstallTests(unittest.TestCase):
     def test_missing_config_skips_without_creating_directories(self):
         self.assertIn("[INFO]", self.run_installer())
         self.assertFalse(self.target.parent.exists())
+
+    def test_python_without_tomllib_skips_without_changes(self):
+        self.write('model = "keep"\n')
+        python = self.bin / "python3"
+        python.unlink()
+        python.write_text("#!/bin/sh\nexit 1\n")
+        python.chmod(0o755)
+        self.assertIn("Python 3.11 or newer is required", self.run_installer())
+        self.assertEqual(self.target.read_text(), 'model = "keep"\n')
+        self.assertFalse(Path(str(self.target) + ".bak").exists())
 
     def test_install_without_codex_cli_and_repeat(self):
         original = '# Personal settings\nmodel = "existing-model"\n[features]\nnetwork_proxy = true\n'
